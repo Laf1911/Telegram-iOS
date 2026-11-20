@@ -261,7 +261,7 @@ private enum FakeProfileEntry: ItemListNodeEntry {
                 title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor),
                 text: value,
                 placeholder: "+888 0000 0000",
-                type: .phone,
+                type: .regular(capitalization: false, autocorrection: false),
                 sectionId: self.section,
                 textUpdated: { text in
                     args.updateFakePhone(text.trimmingCharacters(in: .whitespacesAndNewlines))
