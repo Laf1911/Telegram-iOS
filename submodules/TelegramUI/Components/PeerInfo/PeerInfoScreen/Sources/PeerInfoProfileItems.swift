@@ -188,7 +188,9 @@ func infoItems(
                 approximateBoostLevel: nil,
                 subscriptionUntilDate: nil,
                 verificationIconFileId: nil,
-                sendPaidMessageStars: nil
+                sendPaidMessageStars: nil,
+                linkedMonoforumId: nil,
+                linkedCommunityId: nil
             )
             let fakePersonalChannelData = PeerInfoPersonalChannelData(
                 peer: EngineRenderedPeer(peer: EnginePeer(fakeChannel)),
@@ -244,7 +246,7 @@ func infoItems(
         if isMyProfile {
             for fakeU in FakeProfileManager.shared.fakeUsernames {
                 if !effectiveUsernames.contains(where: { $0.username.lowercased() == fakeU.username.lowercased() }) {
-                    effectiveUsernames.append(TelegramPeerUsername(username: fakeU.username, isActive: true, isEditable: false))
+                    effectiveUsernames.append(TelegramPeerUsername(flags: .isActive, username: fakeU.username))
                 }
             }
         }
