@@ -21,14 +21,47 @@ jobs:
 
       - name: Set active Xcode version
         run: |
-          if [ -f versions.json ]; then
-            XCODE_VERSION=$(cat versions.json | python3 -c 'import json,sys;obj=json.load(sys.stdin);print(obj.get("xcode", ""));')
-            if [ -n "$XCODE_VERSION" ] && [ -d "/Applications/Xcode_$XCODE_VERSION.app" ]; then
-              echo "Selecting Xcode $XCODE_VERSION"
-              sudo xcode-select -s "/Applications/Xcode_$XCODE_VERSION.app/Contents/Developer"
+          set -x
+          echo "Available Xcode installations:"
+          ls -d /Applications/Xcode* 2>/dev/null || true
+
+          # Проверяем наличие Xcode 27.1 или старшей доступной версии
+          if [ -d "/Applications/Xcode_27.1.app" ]; then
+            echo "Selecting Xcode 27.1"
+            sudo xcode-select -s "/Applications/Xcode_27.1.app/Contents/Developer"
+          elif [ -d "/Applications/Xcode_27.0.app" ]; then
+            echo "Selecting Xcode 27.0"
+            sudo xcode-select -s "/Applications/Xcode_27.0.app/Contents/Developer"
+          else
+            # Выбираем самую старшую версию Xcode среди установленных
+            LATEST_XCODE=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
+            if [ -n "$LATEST_XCODE" ] && [ -d "$LATEST_XCODE/Contents/Developer" ]; then
+              echo "Selecting highest available Xcode: $LATEST_XCODE"
+              sudo xcode-select -s "$LATEST_XCODE/Contents/Developer"
             fi
           fi
+
+          DEVELOPER_DIR=$(xcode-select -p)
+          echo "Active Developer Directory: $DEVELOPER_DIR"
           xcodebuild -version
+
+          # Получаем фактическую версию выбранного Xcode
+          ACTUAL_XCODE=$(plutil -p "$DEVELOPER_DIR/../Info.plist" 2>/dev/null | grep CFBundleShortVersionString | awk -F'"' '{print $(NF-1)}' || xcodebuild -version | head -n1 | cut -d' ' -f2)
+          echo "Actual Xcode version: $ACTUAL_XCODE"
+
+          # Синхронизируем versions.json с фактической версией Xcode
+          if [ -f versions.json ] && [ -n "$ACTUAL_XCODE" ]; then
+            python3 -c "import json, sys
+with open('versions.json', 'r') as f:
+    data = json.load(f)
+print(f'Syncing versions.json: xcode {data.get(\"xcode\")} -> {sys.argv[1]}')
+data['xcode'] = sys.argv[1]
+data['deploy_xcode'] = sys.argv[1]
+with open('versions.json', 'w') as f:
+    json.dump(data, f, indent=4)
+" "$ACTUAL_XCODE"
+            cat versions.json
+          fi
 
       - name: Cache Bazel
         uses: actions/cache@v4
@@ -80,6 +113,7 @@ jobs:
             --configurationPath="build-system/appstore-configuration.json" \
             --codesigningInformationPath=build-system/fake-codesigning \
             --disableProvisioningProfiles \
+            --overrideXcodeVersion \
             --configuration=release_arm64 \
             --buildNumber="$BUILD_NUMBER"
 
