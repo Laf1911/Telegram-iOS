@@ -1992,7 +1992,8 @@ private func generateFakeSavedStarGifts(accountPeerId: EnginePeer.Id) -> [Profil
             immediateThumbnailData: nil,
             mimeType: "application/x-tgsticker",
             size: 0,
-            attributes: [.FileName(fileName: "\(item.patternName).tgs")]
+            attributes: [.FileName(fileName: "\(item.patternName).tgs")],
+            alternativeRepresentations: []
         )
         
         let backdropAttr = StarGift.UniqueGift.Attribute.backdrop(
