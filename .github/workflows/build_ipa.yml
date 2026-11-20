@@ -132,25 +132,28 @@ jobs:
 
           # Упаковка в TelegramMod.ipa
           mkdir -p build/artifacts
-          FOUND_IPA=$(find bazel-out -name "Telegram.ipa" -print -quit)
-          if [ -n "$FOUND_IPA" ]; then
-            echo "Found Telegram.ipa at $FOUND_IPA"
+          echo "Locating generated IPA..."
+          FOUND_IPA=$(find "$SOURCE_DIR/bazel-bin" "$SOURCE_DIR/bazel-out" "$SOURCE_DIR/build/artifacts" -name "*.ipa" -print -quit 2>/dev/null || true)
+          if [ -n "$FOUND_IPA" ] && [ -f "$FOUND_IPA" ]; then
+            echo "Found IPA at $FOUND_IPA"
             cp "$FOUND_IPA" "$GITHUB_WORKSPACE/TelegramMod.ipa"
           else
-            echo "Searching for Telegram.app..."
-            APP_DIR=$(find bazel-out -name "Telegram.app" -type d -print -quit)
-            if [ -n "$APP_DIR" ]; then
-              echo "Found Telegram.app at $APP_DIR. Packaging into Payload..."
+            echo "IPA file not directly found. Searching for .app bundle..."
+            APP_DIR=$(find "$SOURCE_DIR/bazel-bin" "$SOURCE_DIR/bazel-out" -name "Swiftgram.app" -o -name "Telegram.app" -type d -print -quit 2>/dev/null || true)
+            if [ -z "$APP_DIR" ]; then
+              APP_DIR=$(find "$SOURCE_DIR/bazel-bin" "$SOURCE_DIR/bazel-out" -name "*.app" -type d -print -quit 2>/dev/null || true)
+            fi
+            if [ -n "$APP_DIR" ] && [ -d "$APP_DIR" ]; then
+              echo "Found app bundle at $APP_DIR. Packaging into Payload..."
+              rm -rf Payload
               mkdir -p Payload
               cp -R "$APP_DIR" Payload/
               zip -qr "$GITHUB_WORKSPACE/TelegramMod.ipa" Payload
+              rm -rf Payload
             else
-              echo "Warning: Neither Telegram.ipa nor Telegram.app found, checking bazel-bin..."
-              if [ -d bazel-bin/Telegram/Telegram.app ]; then
-                mkdir -p Payload
-                cp -R bazel-bin/Telegram/Telegram.app Payload/
-                zip -qr "$GITHUB_WORKSPACE/TelegramMod.ipa" Payload
-              fi
+              echo "Error: Neither *.ipa nor *.app found in build outputs."
+              ls -la "$SOURCE_DIR/bazel-bin/Telegram" 2>/dev/null || true
+              exit 1
             fi
           fi
 
