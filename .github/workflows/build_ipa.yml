@@ -97,6 +97,27 @@ jobs:
           # Импорт самоподписанных сертификатов для сборки без платного аккаунта Apple Developer
           python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
 
+          # Обновление срока действия ExpirationDate и переподписание фейковых профилей через security cms
+          security set-keychain-settings temp.keychain
+          security unlock-keychain -p secret temp.keychain
+          security set-key-partition-list -S apple-tool:,apple: -k secret temp.keychain || true
+
+          SIGNING_IDENTITY="Apple Distribution: Telegram FZ-LLC (C67CF9S4VU)"
+          echo "Signing updated profiles with identity: $SIGNING_IDENTITY"
+
+          for PROFILE in build-system/fake-codesigning/profiles/*.mobileprovision; do
+            if [ -f "$PROFILE" ]; then
+              echo "Resigning $PROFILE..."
+              TMP_PLIST=$(mktemp)
+              security cms -D -i "$PROFILE" > "$TMP_PLIST"
+              python3 -c 'import sys; p = sys.argv[1]; c = open(p, "r").read(); c = c.replace("2026-10-30", "2028-10-30"); open(p, "w").write(c)' "$TMP_PLIST"
+              security cms -S -k temp.keychain -N "$SIGNING_IDENTITY" -i "$TMP_PLIST" -o "$PROFILE"
+              rm -f "$TMP_PLIST"
+              openssl smime -inform der -verify -noverify -in "$PROFILE" > /dev/null
+              echo "Verified $PROFILE: OK"
+            fi
+          done
+
           # Сборка с флагом CODE_SIGNING_ALLOWED=NO и конфигурацией fake-codesigning
           export CODE_SIGNING_ALLOWED=NO
           python3 -u build-system/Make/Make.py \
