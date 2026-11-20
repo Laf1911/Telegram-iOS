@@ -16,6 +16,8 @@ swift_library(
     ]),
     copts = [
         "-warnings-as-errors",
+        "-Xfrontend",
+        "-disable-sil-ownership-verifier",
     ],
     deps = sgdeps + [ # MARK: Swiftgram
         "//submodules/AsyncDisplayKit",
