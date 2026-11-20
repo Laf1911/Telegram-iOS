@@ -9,10 +9,19 @@ public typealias SGResetPresenter = (UIViewController, @escaping () -> Void) -> 
 
 private func sgDefaultDataPath() throws -> String {
     NSLog("[SG.DBReset] Resolving app-group container")
-    guard let appGroupUrl = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: sgAppGroupIdentifier()) else {
-        throw NSError(domain: "SG.DBReset", code: 2, userInfo: [NSLocalizedDescriptionKey: "The app-group container is unavailable. Unlock the device and restart the app to retry."])
+    if let appGroupUrl = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: sgAppGroupIdentifier()) {
+        return (appGroupUrl.path as NSString).appendingPathComponent("telegram-data")
     }
-    return (appGroupUrl.path as NSString).appendingPathComponent("telegram-data")
+    guard let baseSupportUrl = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+        throw NSError(domain: "SG.DBReset", code: 2, userInfo: [NSLocalizedDescriptionKey: "Application Support directory is unavailable."])
+    }
+    let appSupportUrl = baseSupportUrl.appendingPathComponent("TelegramData", isDirectory: true)
+    try FileManager.default.createDirectory(at: appSupportUrl, withIntermediateDirectories: true, attributes: nil)
+    var resourceValues = URLResourceValues()
+    resourceValues.isExcludedFromBackup = true
+    var mutableUrl = appSupportUrl
+    try? mutableUrl.setResourceValues(resourceValues)
+    return (appSupportUrl.path as NSString).appendingPathComponent("telegram-data")
 }
 
 private final class SGResetProgress {

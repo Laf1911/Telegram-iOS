@@ -95,13 +95,15 @@ public final class PasscodeEnvironment: @unchecked Sendable {
             throw PasscodeError.unavailable
         }
         #if !os(macOS)
-        guard !group.hasPrefix("group."),
-              group.hasSuffix("." + configuration.appGroupIdentifier.dropFirst("group.".count)) else {
+        guard !group.hasPrefix("group.") else {
             throw PasscodeError.unavailable
         }
-        #endif
         self.resolvedPrivateAccessGroup = group
         return group
+        #else
+        self.resolvedPrivateAccessGroup = group
+        return group
+        #endif
     }
 }
 
@@ -116,7 +118,7 @@ final class PasscodeKeychain: PasscodeStorage {
     private let environment: PasscodeEnvironment
     init(environment: PasscodeEnvironment = .shared) { self.environment = environment }
 
-    func query(_ account: String) throws -> [String: Any] {
+    func query(_ account: String, useAccessGroup: Bool = true) throws -> [String: Any] {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: try self.service(account),
@@ -124,7 +126,12 @@ final class PasscodeKeychain: PasscodeStorage {
             kSecAttrSynchronizable as String: false
         ]
         #if !os(macOS)
-        query[kSecAttrAccessGroup as String] = try account.hasPrefix("biometric.") ? self.environment.privateAccessGroup() : self.environment.sharedAccessGroup()
+        if useAccessGroup {
+            let group = account.hasPrefix("biometric.") ? (try? self.environment.privateAccessGroup()) : (try? self.environment.sharedAccessGroup())
+            if let group = group, !group.isEmpty {
+                query[kSecAttrAccessGroup as String] = group
+            }
+        }
         #endif
         return query
     }
@@ -151,12 +158,28 @@ final class PasscodeKeychain: PasscodeStorage {
     }
 
     private func rawRead(_ account: String, context: LAContext?) throws -> Data? {
-        var query = try self.query(account)
+        var query = try self.query(account, useAccessGroup: true)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         if let context { query[kSecUseAuthenticationContext as String] = context }
         var result: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        var status = SecItemCopyMatching(query as CFDictionary, &result)
+        #if !os(macOS)
+        if status == errSecMissingEntitlement || status == errSecParam || status == errSecItemNotFound {
+            let fallbackQuery = try self.query(account, useAccessGroup: false)
+            if (fallbackQuery[kSecAttrAccessGroup as String] as? String) != (query[kSecAttrAccessGroup as String] as? String) {
+                var fallbackResult: CFTypeRef?
+                var fullFallbackQuery = fallbackQuery
+                fullFallbackQuery[kSecReturnData as String] = true
+                fullFallbackQuery[kSecMatchLimit as String] = kSecMatchLimitOne
+                if let context { fullFallbackQuery[kSecUseAuthenticationContext as String] = context }
+                let fallbackStatus = SecItemCopyMatching(fullFallbackQuery as CFDictionary, &fallbackResult)
+                if fallbackStatus == errSecSuccess, let data = fallbackResult as? Data {
+                    return data
+                }
+            }
+        }
+        #endif
         if status == errSecItemNotFound { return nil }
         if status == errSecUserCanceled { throw PasscodeError.cancelled }
         guard status == errSecSuccess, let data = result as? Data else { throw PasscodeError.keychain(status) }
@@ -184,9 +207,15 @@ final class PasscodeKeychain: PasscodeStorage {
     #endif
 
     func write(_ data: Data, account: String, biometric: Bool = false) throws {
-        let query = try self.query(account)
+        var query = try self.query(account, useAccessGroup: true)
         if !biometric {
-            let status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+            var status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+            #if !os(macOS)
+            if status == errSecMissingEntitlement || status == errSecParam {
+                query = try self.query(account, useAccessGroup: false)
+                status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+            }
+            #endif
             if status == errSecSuccess { return }
             guard status == errSecItemNotFound else { throw PasscodeError.keychain(status) }
         }
@@ -202,7 +231,13 @@ final class PasscodeKeychain: PasscodeStorage {
         } else {
             insert[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         }
-        let status = SecItemAdd(insert as CFDictionary, nil)
+        var status = SecItemAdd(insert as CFDictionary, nil)
+        #if !os(macOS)
+        if status == errSecMissingEntitlement || status == errSecParam {
+            insert.removeValue(forKey: kSecAttrAccessGroup as String)
+            status = SecItemAdd(insert as CFDictionary, nil)
+        }
+        #endif
         if biometric, status == errSecMissingEntitlement {
             throw PasscodeError.biometricsUnavailable
         }
@@ -210,7 +245,16 @@ final class PasscodeKeychain: PasscodeStorage {
     }
 
     func remove(_ account: String) throws {
-        let status = SecItemDelete(try self.query(account) as CFDictionary)
+        var query = try self.query(account, useAccessGroup: true)
+        var status = SecItemDelete(query as CFDictionary)
+        #if !os(macOS)
+        if status == errSecMissingEntitlement || status == errSecParam || status == errSecItemNotFound {
+            let fallbackQuery = try self.query(account, useAccessGroup: false)
+            if (fallbackQuery[kSecAttrAccessGroup as String] as? String) != (query[kSecAttrAccessGroup as String] as? String) {
+                let _ = SecItemDelete(fallbackQuery as CFDictionary)
+            }
+        }
+        #endif
         guard status == errSecSuccess || status == errSecItemNotFound else { throw PasscodeError.keychain(status) }
     }
 }

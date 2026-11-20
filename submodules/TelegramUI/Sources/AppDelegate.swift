@@ -4,6 +4,7 @@ import SGIAP
 import SGAPI
 import SGDeviceToken
 import SGAPIToken
+import SGAppGroupIdentifier
 
 import SGActionRequestHandlerSanitizer
 import SGGHSettings
@@ -318,17 +319,21 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     }
     private let firebaseRequestVerificationSecretStream = Promise<[String: String]>([:])
     
+    private let urlSessionsLock = NSLock()
     private var urlSessions: [URLSession] = []
     private func urlSession(identifier: String) -> URLSession {
+        self.urlSessionsLock.lock()
+        defer { self.urlSessionsLock.unlock() }
         if let existingSession = self.urlSessions.first(where: { $0.configuration.identifier == identifier }) {
             return existingSession
         }
         
-        let baseAppBundleId = Bundle.main.bundleIdentifier!
-        let appGroupName = "group.\(baseAppBundleId)"
+        let appGroupName = sgAppGroupIdentifier()
 
         let configuration = URLSessionConfiguration.background(withIdentifier: identifier)
-        configuration.sharedContainerIdentifier = appGroupName
+        if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName) != nil {
+            configuration.sharedContainerIdentifier = appGroupName
+        }
         configuration.isDiscretionary = false
         let session = URLSession(configuration: configuration, delegate: self, delegateQueue: .main)
         self.urlSessions.append(session)
@@ -592,15 +597,30 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         
         let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
         
-        let baseAppBundleId = Bundle.main.bundleIdentifier!
-        let appGroupName = "group.\(baseAppBundleId)"
+        let baseAppBundleId = sgBaseBundleIdentifier()
+        let appGroupName = sgAppGroupIdentifier()
         NSLog("[SG.Launch] Configuring passcode environment") // MARK: Swiftgram
-        try! PasscodeEnvironment.shared.configure(PasscodeConfiguration(appGroupIdentifier: appGroupName, processRole: .mainApp, biometricKeychainService: walletBiometricKeychainService), privateAccessGroup: {
+        try? PasscodeEnvironment.shared.configure(PasscodeConfiguration(appGroupIdentifier: appGroupName, processRole: .mainApp, biometricKeychainService: walletBiometricKeychainService), privateAccessGroup: {
             BuildConfig.keychainAccessGroup(baseAppBundleId: baseAppBundleId)
         })
         NSLog("[SG.Launch] Resolving app-group container") // MARK: Swiftgram
         let maybeAppGroupUrl = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName)
         NSLog("[SG.Launch] App-group container resolved: \(maybeAppGroupUrl != nil)") // MARK: Swiftgram
+        
+        let appGroupUrl: URL
+        if let resolvedUrl = maybeAppGroupUrl {
+            appGroupUrl = resolvedUrl
+        } else {
+            let baseSupportUrl = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSTemporaryDirectory())
+            let appSupportUrl = baseSupportUrl.appendingPathComponent("TelegramData", isDirectory: true)
+            try? FileManager.default.createDirectory(at: appSupportUrl, withIntermediateDirectories: true, attributes: nil)
+            var resourceValues = URLResourceValues()
+            resourceValues.isExcludedFromBackup = true
+            var mutableUrl = appSupportUrl
+            try? mutableUrl.setResourceValues(resourceValues)
+            appGroupUrl = appSupportUrl
+            NSLog("[SG.Launch] App Group unavailable, falling back to sandbox: \(appGroupUrl.path)")
+        }
         
         let buildConfig = BuildConfig(baseAppBundleId: baseAppBundleId)
         self.buildConfig = buildConfig
@@ -723,10 +743,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             networkEngineFactory: RustNetworkEngineFactory()
         )
         
-        guard let appGroupUrl = maybeAppGroupUrl else {
-            self.mainWindow?.presentNative(UIAlertController(title: nil, message: "Error 2", preferredStyle: .alert))
-            return true
-        }
+        // App Group fallback to sandbox handled during initialization above
         
         var isDebugConfiguration = false
         #if DEBUG
@@ -1902,8 +1919,10 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         // (Measured on iOS 26.5; iOS 27 sources the keyboard geometry elsewhere and is unaffected,
         // so it cannot be used to verify this.)
         if let window = self.window, let rootViewController = window.rootViewController {
-            window.rootViewController = nil
-            window.rootViewController = rootViewController
+            if window.rootViewController?.presentedViewController == nil {
+                window.rootViewController = nil
+                window.rootViewController = rootViewController
+            }
         }
 
         self.mainWindow?.updateDeviceMetrics()
