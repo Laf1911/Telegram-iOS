@@ -130,32 +130,42 @@ jobs:
             --configuration=release_arm64 \
             --buildNumber="$BUILD_NUMBER"
 
-          # Упаковка в TelegramMod.ipa
+          # Копирование и валидация TelegramMod.ipa
           mkdir -p build/artifacts
           echo "Locating generated IPA..."
-          FOUND_IPA=$(find "$SOURCE_DIR/bazel-bin" "$SOURCE_DIR/bazel-out" "$SOURCE_DIR/build/artifacts" -name "*.ipa" -print -quit 2>/dev/null || true)
-          if [ -n "$FOUND_IPA" ] && [ -f "$FOUND_IPA" ]; then
-            echo "Found IPA at $FOUND_IPA"
-            cp "$FOUND_IPA" "$GITHUB_WORKSPACE/TelegramMod.ipa"
+          if [ -f "$SOURCE_DIR/bazel-bin/Telegram/Swiftgram.ipa" ]; then
+            echo "Found Swiftgram.ipa in bazel-bin:"
+            ls -lh "$SOURCE_DIR/bazel-bin/Telegram/Swiftgram.ipa"
+            cp "$SOURCE_DIR/bazel-bin/Telegram/Swiftgram.ipa" "$GITHUB_WORKSPACE/TelegramMod.ipa"
+          elif [ -f "$SOURCE_DIR/bazel-bin/Telegram/Telegram.ipa" ]; then
+            echo "Found Telegram.ipa in bazel-bin:"
+            ls -lh "$SOURCE_DIR/bazel-bin/Telegram/Telegram.ipa"
+            cp "$SOURCE_DIR/bazel-bin/Telegram/Telegram.ipa" "$GITHUB_WORKSPACE/TelegramMod.ipa"
           else
-            echo "IPA file not directly found. Searching for .app bundle..."
-            APP_DIR=$(find "$SOURCE_DIR/bazel-bin" "$SOURCE_DIR/bazel-out" -name "Swiftgram.app" -o -name "Telegram.app" -type d -print -quit 2>/dev/null || true)
-            if [ -z "$APP_DIR" ]; then
-              APP_DIR=$(find "$SOURCE_DIR/bazel-bin" "$SOURCE_DIR/bazel-out" -name "*.app" -type d -print -quit 2>/dev/null || true)
-            fi
-            if [ -n "$APP_DIR" ] && [ -d "$APP_DIR" ]; then
-              echo "Found app bundle at $APP_DIR. Packaging into Payload..."
-              rm -rf Payload
-              mkdir -p Payload
-              cp -R "$APP_DIR" Payload/
-              zip -qr "$GITHUB_WORKSPACE/TelegramMod.ipa" Payload
-              rm -rf Payload
+            echo "Checking with find -L..."
+            FOUND_IPA=$(find -L "$SOURCE_DIR/bazel-bin" "$SOURCE_DIR/bazel-out" -name "*.ipa" -print -quit 2>/dev/null || true)
+            if [ -n "$FOUND_IPA" ] && [ -f "$FOUND_IPA" ]; then
+              echo "Found IPA at $FOUND_IPA"
+              cp "$FOUND_IPA" "$GITHUB_WORKSPACE/TelegramMod.ipa"
             else
-              echo "Error: Neither *.ipa nor *.app found in build outputs."
-              ls -la "$SOURCE_DIR/bazel-bin/Telegram" 2>/dev/null || true
-              exit 1
+              echo "Searching for .app bundle..."
+              APP_DIR=$(find -L "$SOURCE_DIR/bazel-bin" "$SOURCE_DIR/bazel-out" -name "*.app" -type d -print -quit 2>/dev/null || true)
+              if [ -n "$APP_DIR" ] && [ -d "$APP_DIR" ]; then
+                echo "Found app bundle at $APP_DIR. Packaging into Payload..."
+                rm -rf Payload
+                mkdir -p Payload
+                cp -R "$APP_DIR" Payload/
+                zip -qr "$GITHUB_WORKSPACE/TelegramMod.ipa" Payload
+                rm -rf Payload
+              else
+                echo "Error: Neither *.ipa nor *.app found in build outputs."
+                ls -la "$SOURCE_DIR/bazel-bin/Telegram" 2>/dev/null || true
+                exit 1
+              fi
             fi
           fi
+          echo "Verified output IPA:"
+          ls -lh "$GITHUB_WORKSPACE/TelegramMod.ipa"
 
       - name: Save Bazel Cache
         uses: actions/cache/save@v4
