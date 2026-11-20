@@ -101,11 +101,11 @@ jobs:
           export CODE_SIGNING_ALLOWED=NO
           python3 -u build-system/Make/Make.py \
             --bazelUserRoot="$BAZEL_USER_ROOT" \
+            --overrideXcodeVersion \
             build \
             --configurationPath="build-system/appstore-configuration.json" \
             --codesigningInformationPath=build-system/fake-codesigning \
             --disableProvisioningProfiles \
-            --overrideXcodeVersion \
             --configuration=release_arm64 \
             --buildNumber="$BUILD_NUMBER"
 
