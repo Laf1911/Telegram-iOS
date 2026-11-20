@@ -163,7 +163,7 @@ final class PasscodeKeychain: PasscodeStorage {
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         if let context { query[kSecUseAuthenticationContext as String] = context }
         var result: CFTypeRef?
-        var status = SecItemCopyMatching(query as CFDictionary, &result)
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
         #if !os(macOS)
         if status == errSecMissingEntitlement || status == errSecParam || status == errSecItemNotFound {
             let fallbackQuery = try self.query(account, useAccessGroup: false)
@@ -245,8 +245,8 @@ final class PasscodeKeychain: PasscodeStorage {
     }
 
     func remove(_ account: String) throws {
-        var query = try self.query(account, useAccessGroup: true)
-        var status = SecItemDelete(query as CFDictionary)
+        let query = try self.query(account, useAccessGroup: true)
+        let status = SecItemDelete(query as CFDictionary)
         #if !os(macOS)
         if status == errSecMissingEntitlement || status == errSecParam || status == errSecItemNotFound {
             let fallbackQuery = try self.query(account, useAccessGroup: false)
