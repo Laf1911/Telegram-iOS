@@ -51,15 +51,7 @@ jobs:
 
           # Синхронизируем versions.json с фактической версией Xcode
           if [ -f versions.json ] && [ -n "$ACTUAL_XCODE" ]; then
-            python3 -c "import json, sys
-with open('versions.json', 'r') as f:
-    data = json.load(f)
-print(f'Syncing versions.json: xcode {data.get(\"xcode\")} -> {sys.argv[1]}')
-data['xcode'] = sys.argv[1]
-data['deploy_xcode'] = sys.argv[1]
-with open('versions.json', 'w') as f:
-    json.dump(data, f, indent=4)
-" "$ACTUAL_XCODE"
+            python3 -c 'import json, sys; p="versions.json"; f=open(p); d=json.load(f); f.close(); d["xcode"]=sys.argv[1]; d["deploy_xcode"]=sys.argv[1]; f=open(p,"w"); json.dump(d,f,indent=4); f.close()' "$ACTUAL_XCODE"
             cat versions.json
           fi
 
