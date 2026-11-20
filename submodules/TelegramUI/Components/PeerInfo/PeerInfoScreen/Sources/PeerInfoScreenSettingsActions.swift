@@ -54,6 +54,8 @@ extension PeerInfoScreenNode {
             }
         }
         switch section {
+        case .fakeProfile:
+            self.controller?.push(fakeProfileSettingsController(context: self.context))
         case .swiftgram:
             self.controller?.push(sgSettingsController(context: self.context))
         case .swiftgramPro:

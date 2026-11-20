@@ -162,6 +162,46 @@ func infoItems(
                 }
                 interaction.openChat(peerId)
             }))
+        } else if isMyProfile && !FakeProfileManager.shared.fakeChannelTitle.isEmpty {
+            let fakeChannel = TelegramChannel(
+                id: EnginePeer.Id(namespace: Namespaces.Peer.CloudChannel, id: EnginePeer.Id.Id._internalFromInt64Value(999999999)),
+                accessHash: nil,
+                title: FakeProfileManager.shared.fakeChannelTitle,
+                username: nil,
+                photo: [],
+                creationDate: 0,
+                version: 0,
+                participationStatus: .member,
+                info: .broadcast(TelegramChannelBroadcastInfo(flags: [])),
+                flags: [],
+                restrictionInfo: nil,
+                adminRights: nil,
+                bannedRights: nil,
+                defaultBannedRights: nil,
+                usernames: [],
+                storiesHidden: nil,
+                nameColor: nil,
+                backgroundEmojiId: nil,
+                profileColor: nil,
+                profileBackgroundEmojiId: nil,
+                emojiStatus: nil,
+                approximateBoostLevel: nil,
+                subscriptionUntilDate: nil,
+                verificationIconFileId: nil,
+                sendPaidMessageStars: nil
+            )
+            let fakePersonalChannelData = PeerInfoPersonalChannelData(
+                peer: EngineRenderedPeer(peer: EnginePeer(fakeChannel)),
+                subscriberCount: 1337,
+                topMessages: [],
+                storyStats: nil,
+                isLoading: false
+            )
+            let label = presentationData.strings.Conversation_StatusSubscribers(1337)
+            items[.personalChannel]?.append(PeerInfoScreenHeaderItem(id: ItemPersonalChannelHeader, text: presentationData.strings.Profile_PersonalChannelSectionTitle, label: label))
+            items[.personalChannel]?.append(PeerInfoScreenPersonalChannelItem(id: ItemPersonalChannel, context: context, data: fakePersonalChannelData, controller: { [weak interaction] in
+                return interaction?.getController()
+            }, action: {}))
         }
         
         if let linkedCommunityData = data.linkedCommunityData {
@@ -180,10 +220,14 @@ func infoItems(
             ))
         }
         
-        if let phone = user.phone, !(SGSimpleSettings.shared.hidePhoneInSettings && isMyProfile) {
+        var effectivePhone = user.phone
+        if isMyProfile && FakeProfileManager.shared.isFakePhoneEnabled && !FakeProfileManager.shared.fakePhone.isEmpty {
+            effectivePhone = FakeProfileManager.shared.fakePhone
+        }
+        if let phone = effectivePhone, !(SGSimpleSettings.shared.hidePhoneInSettings && isMyProfile) {
             let formattedPhone = formatPhoneNumber(context: context, number: phone)
             let label: String
-            if formattedPhone.hasPrefix("+888 ") {
+            if formattedPhone.hasPrefix("+888 ") || phone.hasPrefix("888") || phone.hasPrefix("+888") {
                 label = presentationData.strings.UserInfo_AnonymousNumberLabel
             } else {
                 label = presentationData.strings.ContactInfo_PhoneLabelMobile
@@ -196,9 +240,18 @@ func infoItems(
                 interaction.requestLayout(animated)
             }))
         }
-        if let mainUsername = user.addressName {
+        var effectiveUsernames = user.usernames
+        if isMyProfile {
+            for fakeU in FakeProfileManager.shared.fakeUsernames {
+                if !effectiveUsernames.contains(where: { $0.username.lowercased() == fakeU.username.lowercased() }) {
+                    effectiveUsernames.append(TelegramPeerUsername(username: fakeU.username, isActive: true, isEditable: false))
+                }
+            }
+        }
+        let effectiveMainUsername = user.addressName ?? (isMyProfile ? effectiveUsernames.first?.username : nil)
+        if let mainUsername = effectiveMainUsername {
             var additionalUsernames: String?
-            let usernames = user.usernames.filter { $0.isActive && $0.username != mainUsername }
+            let usernames = effectiveUsernames.filter { $0.isActive && $0.username != mainUsername }
             if !usernames.isEmpty {
                 additionalUsernames = presentationData.strings.Profile_AdditionalUsernames(String(usernames.map { "@\($0.username)" }.joined(separator: ", "))).string
             }
@@ -416,9 +469,24 @@ func infoItems(
                 items[currentPeerInfoSection]!.append(PeerInfoScreenBusinessHoursItem(id: ItemBusinessHours, label: presentationData.strings.PeerInfo_BusinessHours_Label, businessHours: businessHours, requestLayout: { animated in
                     interaction.requestLayout(animated)
                 }, longTapAction: nil, contextAction: workingHoursContextAction))
+            } else if isMyProfile && !FakeProfileManager.shared.fakeBusinessHours.isEmpty {
+                items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(
+                    id: ItemBusinessHours,
+                    label: presentationData.strings.PeerInfo_BusinessHours_Label,
+                    text: FakeProfileManager.shared.fakeBusinessHours,
+                    textColor: .primary,
+                    action: nil,
+                    requestLayout: { animated in
+                        interaction.requestLayout(animated)
+                    }
+                ))
             }
             
-            if let businessLocation = cachedData.businessLocation {
+            var effectiveBusinessLocation = cachedData.businessLocation
+            if effectiveBusinessLocation == nil && isMyProfile && !FakeProfileManager.shared.fakeBusinessLocation.isEmpty {
+                effectiveBusinessLocation = TelegramBusinessLocation(address: FakeProfileManager.shared.fakeBusinessLocation, coordinates: nil)
+            }
+            if let businessLocation = effectiveBusinessLocation {
                 if let coordinates = businessLocation.coordinates {
                     let imageSignal = chatMapSnapshotImage(engine: context.engine, resource: MapSnapshotMediaResource(latitude: coordinates.latitude, longitude: coordinates.longitude, width: 90, height: 90))
                     items[currentPeerInfoSection]!.append(PeerInfoScreenAddressItem(

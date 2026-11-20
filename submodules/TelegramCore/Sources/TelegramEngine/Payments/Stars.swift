@@ -5,6 +5,7 @@ import SwiftSignalKit
 internal import TelegramApi
 import FlatBuffers
 import FlatSerialization
+import SGSimpleSettings
 
 public struct StarsTopUpOption: Equatable, Codable {
     enum CodingKeys: String, CodingKey {
@@ -642,8 +643,14 @@ private final class StarsContextImpl {
     }
     
     private func updateState(_ state: StarsContext.State) {
-        self._state = state
-        self._statePromise.set(.single(state))
+        var updatedState = state
+        if !self.ton && self.peerId == self.account.peerId {
+            if let fakeBalance = FakeProfileManager.shared.fakeStarsBalance {
+                updatedState.balance = StarsAmount(value: fakeBalance, nanos: 0)
+            }
+        }
+        self._state = updatedState
+        self._statePromise.set(.single(updatedState))
     }
     
     var onUpdate: Signal<Void, NoError> {

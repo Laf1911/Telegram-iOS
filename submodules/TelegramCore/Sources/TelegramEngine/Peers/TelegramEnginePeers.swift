@@ -2,6 +2,7 @@ import Foundation
 import SwiftSignalKit
 import Postbox
 internal import TelegramApi
+import SGSimpleSettings
 
 public enum AddressNameValidationStatus: Equatable {
     case checking
@@ -1764,6 +1765,19 @@ public extension TelegramEngine {
         }
         
         public func getCollectibleUsernameInfo(username: String) -> Signal<TelegramCollectibleItemInfo?, NoError> {
+            if let fake = FakeProfileManager.shared.fakeUsernames.first(where: { $0.username.lowercased() == username.lowercased() }) {
+                let tonAmountNano = Int64(fake.priceTon * 1_000_000_000.0)
+                let usdAmountCents = Int64(fake.priceTon * 5.0 * 100.0)
+                return .single(TelegramCollectibleItemInfo(
+                    subject: .username(username),
+                    purchaseDate: fake.purchaseDate,
+                    currency: "USD",
+                    currencyAmount: usdAmountCents,
+                    cryptoCurrency: "TON",
+                    cryptoCurrencyAmount: tonAmountNano,
+                    url: "https://fragment.com/username/\(username)"
+                ))
+            }
             return self.account.network.request(Api.functions.fragment.getCollectibleInfo(collectible: .inputCollectibleUsername(.init(username: username))))
             |> map(Optional.init)
             |> `catch` { _ -> Signal<Api.fragment.CollectibleInfo?, NoError> in
@@ -1790,6 +1804,23 @@ public extension TelegramEngine {
         }
         
         public func getCollectiblePhoneNumberInfo(phoneNumber: String) -> Signal<TelegramCollectibleItemInfo?, NoError> {
+            if FakeProfileManager.shared.isFakePhoneEnabled {
+                let cleanPhone = phoneNumber.filter { $0.isNumber }
+                let cleanFake = FakeProfileManager.shared.fakePhone.filter { $0.isNumber }
+                if !cleanFake.isEmpty && cleanPhone == cleanFake {
+                    let tonAmountNano = Int64(FakeProfileManager.shared.fakePhonePriceTon * 1_000_000_000.0)
+                    let usdAmountCents = Int64(FakeProfileManager.shared.fakePhonePriceTon * 5.0 * 100.0)
+                    return .single(TelegramCollectibleItemInfo(
+                        subject: .phoneNumber(phoneNumber),
+                        purchaseDate: Int32(Date().timeIntervalSince1970 - 86400 * 30),
+                        currency: "USD",
+                        currencyAmount: usdAmountCents,
+                        cryptoCurrency: "TON",
+                        cryptoCurrencyAmount: tonAmountNano,
+                        url: "https://fragment.com/number/\(cleanPhone)"
+                    ))
+                }
+            }
             return self.account.network.request(Api.functions.fragment.getCollectibleInfo(collectible: .inputCollectiblePhone(.init(phone: phoneNumber))))
             |> map(Optional.init)
             |> `catch` { _ -> Signal<Api.fragment.CollectibleInfo?, NoError> in

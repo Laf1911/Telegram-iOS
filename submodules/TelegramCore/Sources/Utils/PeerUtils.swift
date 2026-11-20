@@ -253,6 +253,9 @@ public extension Peer {
     var isPremium: Bool {
         switch self {
         case let user as TelegramUser:
+            if FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: user.id.id._internalGetInt64Value()) {
+                return true
+            }
             return user.flags.contains(.isPremium)
         default:
             return false

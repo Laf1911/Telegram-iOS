@@ -1,0 +1,125 @@
+name: Build TelegramMod IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - main
+
+jobs:
+  build:
+    name: Build TelegramMod IPA
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+          fetch-depth: 0
+
+      - name: Set active Xcode version
+        run: |
+          if [ -f versions.json ]; then
+            XCODE_VERSION=$(cat versions.json | python3 -c 'import json,sys;obj=json.load(sys.stdin);print(obj.get("xcode", ""));')
+            if [ -n "$XCODE_VERSION" ] && [ -d "/Applications/Xcode_$XCODE_VERSION.app" ]; then
+              echo "Selecting Xcode $XCODE_VERSION"
+              sudo xcode-select -s "/Applications/Xcode_$XCODE_VERSION.app/Contents/Developer"
+            fi
+          fi
+          xcodebuild -version
+
+      - name: Cache Bazel
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/bazel
+            /private/var/tmp/_bazel_containerhost
+          key: ${{ runner.os }}-bazel-${{ hashFiles('versions.json', '**/BUILD', 'WORKSPACE', 'MODULE.bazel') }}
+          restore-keys: |
+            ${{ runner.os }}-bazel-
+
+      - name: Prepare build environment
+        run: |
+          set -x
+          sudo mkdir -p /Users/Shared
+          sudo chown -R $(whoami) /Users/Shared
+          ln -sfn "$GITHUB_WORKSPACE" /Users/Shared/telegram-ios
+
+      - name: Compile and Build App with Fake Codesigning
+        run: |
+          set -e
+          set -x
+          SOURCE_DIR=/Users/Shared/telegram-ios
+          BAZEL_USER_ROOT="/private/var/tmp/_bazel_containerhost"
+          cd "$SOURCE_DIR"
+
+          BUILD_NUMBER_OFFSET=0
+          if [ -f build_number_offset ]; then
+            BUILD_NUMBER_OFFSET=$(cat build_number_offset)
+          fi
+
+          APP_VERSION="11.0.0"
+          if [ -f versions.json ]; then
+            APP_VERSION=$(cat versions.json | python3 -c 'import json,sys;obj=json.load(sys.stdin);print(obj.get("app", "11.0.0"));')
+          fi
+
+          COMMIT_COUNT=$(git rev-list --count HEAD || echo "1")
+          BUILD_NUMBER=$((COMMIT_COUNT + BUILD_NUMBER_OFFSET))
+          echo "Building Telegram version $APP_VERSION ($BUILD_NUMBER)..."
+
+          # Импорт самоподписанных сертификатов для сборки без платного аккаунта Apple Developer
+          python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
+
+          # Сборка с флагом CODE_SIGNING_ALLOWED=NO и конфигурацией fake-codesigning
+          export CODE_SIGNING_ALLOWED=NO
+          python3 -u build-system/Make/Make.py \
+            --bazelUserRoot="$BAZEL_USER_ROOT" \
+            build \
+            --configurationPath="build-system/appstore-configuration.json" \
+            --codesigningInformationPath=build-system/fake-codesigning \
+            --disableProvisioningProfiles \
+            --configuration=release_arm64 \
+            --buildNumber="$BUILD_NUMBER"
+
+          # Упаковка в TelegramMod.ipa
+          mkdir -p build/artifacts
+          FOUND_IPA=$(find bazel-out -name "Telegram.ipa" -print -quit)
+          if [ -n "$FOUND_IPA" ]; then
+            echo "Found Telegram.ipa at $FOUND_IPA"
+            cp "$FOUND_IPA" "$GITHUB_WORKSPACE/TelegramMod.ipa"
+          else
+            echo "Searching for Telegram.app..."
+            APP_DIR=$(find bazel-out -name "Telegram.app" -type d -print -quit)
+            if [ -n "$APP_DIR" ]; then
+              echo "Found Telegram.app at $APP_DIR. Packaging into Payload..."
+              mkdir -p Payload
+              cp -R "$APP_DIR" Payload/
+              zip -qr "$GITHUB_WORKSPACE/TelegramMod.ipa" Payload
+            else
+              echo "Warning: Neither Telegram.ipa nor Telegram.app found, checking bazel-bin..."
+              if [ -d bazel-bin/Telegram/Telegram.app ]; then
+                mkdir -p Payload
+                cp -R bazel-bin/Telegram/Telegram.app Payload/
+                zip -qr "$GITHUB_WORKSPACE/TelegramMod.ipa" Payload
+              fi
+            fi
+          fi
+
+      - name: Verify IPA
+        run: |
+          if [ -f "$GITHUB_WORKSPACE/TelegramMod.ipa" ]; then
+            echo "TelegramMod.ipa generated successfully:"
+            ls -lh "$GITHUB_WORKSPACE/TelegramMod.ipa"
+          else
+            echo "Error: TelegramMod.ipa was not created."
+            exit 1
+          fi
+
+      - name: Upload TelegramMod IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TelegramMod
+          path: TelegramMod.ipa
+          if-no-files-found: error

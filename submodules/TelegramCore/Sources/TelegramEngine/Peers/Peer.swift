@@ -1,5 +1,6 @@
 import Foundation
 import Postbox
+import SGSimpleSettings
 
 public enum EnginePeer: Equatable {
     public typealias Id = PeerId
@@ -514,6 +515,9 @@ public extension EnginePeer {
     }
     
     var isPremium: Bool {
+        if FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: self.id.id._internalGetInt64Value()) {
+            return true
+        }
         return self._asPeer().isPremium
     }
     
