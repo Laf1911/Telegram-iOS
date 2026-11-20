@@ -82,7 +82,7 @@ public enum SendAuthorizationCodeResult {
 }
 
 func storeFutureLoginToken(accountManager: AccountManager<TelegramAccountManagerTypes>, token: Data, isICloudEnabled: Bool = false) {
-    (accountManager.transaction { transaction -> Void in
+    let _ = (accountManager.transaction { transaction -> Void in
         var tokens = transaction.getStoredLoginTokens()
         
         #if DEBUG
