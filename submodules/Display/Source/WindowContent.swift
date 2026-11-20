@@ -294,7 +294,20 @@ public final class WindowHostView {
     /// coordinates. Nil before iOS 27.1.
     fileprivate var activeDivision: CGRect? {
         if #available(iOS 27.1, *) {
-            return self.eventView.reservedRegions(kind: .division).first(where: { $0.isActive })?.frame
+            let selector = NSSelectorFromString("reservedRegionsWithKind:")
+            if self.eventView.responds(to: selector) {
+                typealias MethodType = @convention(c) (AnyObject, Selector, Int) -> NSArray?
+                if let method = class_getMethodImplementation(type(of: self.eventView), selector) {
+                    let function = unsafeBitCast(method, to: MethodType.self)
+                    if let array = function(self.eventView, selector, 1) as? [AnyObject] {
+                        for item in array {
+                            if let isActive = (item.value(forKey: "isActive") as? NSNumber)?.boolValue, isActive {
+                                return (item.value(forKey: "frame") as? NSValue)?.cgRectValue
+                            }
+                        }
+                    }
+                }
+            }
         }
         return nil
     }

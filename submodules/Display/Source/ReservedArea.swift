@@ -161,7 +161,21 @@ var iPhoneDuoSystemReportIsSettled: Bool {
 /// camera), in the view's coordinates. Empty before iOS 27.1.
 func activeOcclusionFrames(in view: UIView) -> [CGRect] {
     if #available(iOS 27.1, *) {
-        return view.reservedRegions(kind: .occlusion).filter { $0.isActive }.map { $0.frame }
+        let selector = NSSelectorFromString("reservedRegionsWithKind:")
+        if view.responds(to: selector) {
+            typealias MethodType = @convention(c) (AnyObject, Selector, Int) -> NSArray?
+            if let method = class_getMethodImplementation(type(of: view), selector) {
+                let function = unsafeBitCast(method, to: MethodType.self)
+                if let array = function(view, selector, 0) as? [AnyObject] {
+                    return array.compactMap { item -> CGRect? in
+                        guard let isActive = (item.value(forKey: "isActive") as? NSNumber)?.boolValue, isActive else {
+                            return nil
+                        }
+                        return (item.value(forKey: "frame") as? NSValue)?.cgRectValue
+                    }
+                }
+            }
+        }
     }
     return []
 }
