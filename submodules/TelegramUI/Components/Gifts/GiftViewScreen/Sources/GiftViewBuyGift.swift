@@ -60,6 +60,9 @@ public func buyStarGiftImpl(
 
         let proceed: () -> Void = {
             updateProgress(true)
+            if hasFakeBalanceForCurrency {
+                StarGiftsRealMediaCache.shared.stageUniqueGift(uniqueGift)
+            }
             
             let buyGiftImpl: ((String, EnginePeer.Id, CurrencyAmount?, Bool, String?, [MessageTextEntity]?) -> Signal<Never, BuyStarGiftError>)
             if let buyGift {
@@ -142,57 +145,6 @@ public func buyStarGiftImpl(
                 }
             },
             completed: {
-                if hasFakeBalanceForCurrency {
-                    var innerColor: Int32?
-                    var outerColor: Int32?
-                    var patternColor: Int32?
-                    var textColor: Int32?
-                    
-                    for attr in uniqueGift.attributes {
-                        switch attr {
-                        case let .backdrop(_, _, inner, outer, pattern, text, _):
-                            innerColor = inner
-                            outerColor = outer
-                            patternColor = pattern
-                            textColor = text
-                        case let .model(_, file, _, _):
-                            StarGiftsRealMediaCache.shared.register(file: file, for: uniqueGift.giftId)
-                        default:
-                            break
-                        }
-                    }
-                    
-                    let targetPeerIdInt = recipientPeerId.id._internalGetInt64Value()
-                    let boughtGift = FakeStarGiftItem(
-                        id: UUID(),
-                        baseGiftId: uniqueGift.giftId,
-                        backdropColorHex: "#D4AF37",
-                        patternName: uniqueGift.title,
-                        giftNumber: uniqueGift.number,
-                        canTransfer: true,
-                        canResell: true,
-                        ownerPeerId: targetPeerIdInt,
-                        isPinned: false,
-                        isWorn: false,
-                        resellPriceStars: nil,
-                        resellPriceTon: nil,
-                        senderPeerId: nil,
-                        senderName: nil,
-                        sendDate: Int32(Date().timeIntervalSince1970),
-                        canCraft: false,
-                        isUpgraded: true,
-                        canUpgrade: false,
-                        title: uniqueGift.title,
-                        slug: uniqueGift.slug,
-                        innerColor: innerColor,
-                        outerColor: outerColor,
-                        patternColor: patternColor,
-                        textColor: textColor,
-                        upgradeStars: nil
-                    )
-                    FakeProfileManager.shared.addGift(boughtGift, for: targetPeerIdInt)
-                }
-                
                 beforeCompletion()
                 completion()
 

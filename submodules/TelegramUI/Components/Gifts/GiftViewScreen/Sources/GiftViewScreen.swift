@@ -5065,8 +5065,31 @@ private final class GiftViewSheetContent: CombinedComponent {
                         attributeMap[attribute.attributeType] = attribute
                     }
                     
+                    let effectiveOwnerPeerId: EnginePeer.Id = {
+                        if case let .peerId(ownerId) = uniqueGift.owner {
+                            return ownerId
+                        }
+                        if wearOwnerPeerId != component.context.account.peerId {
+                            return wearOwnerPeerId
+                        }
+                        return component.subject.arguments?.peerId ?? component.context.account.peerId
+                    }()
+                    let isLocalOrMarketGift: Bool = {
+                        let fakeGifts = FakeProfileManager.shared.fakeGifts(for: effectiveOwnerPeerId.id._internalGetInt64Value())
+                        if let fake = fakeGifts.first(where: {
+                            ($0.slug != nil && !$0.slug!.isEmpty && $0.slug!.lowercased() == uniqueGift.slug.lowercased()) ||
+                            ($0.baseGiftId != 0 && $0.giftNumber != 0 && $0.baseGiftId == uniqueGift.giftId && $0.giftNumber == uniqueGift.number)
+                        }) {
+                            return fake.hideOriginalDetails
+                        }
+                        return false
+                    }()
+                    
                     var hasOriginalInfo = false
                     for type in order {
+                        if type == .originalInfo && isLocalOrMarketGift {
+                            continue
+                        }
                         if let attribute = attributeMap[type] {
                             var id: String
                             let title: String?
@@ -6941,9 +6964,21 @@ public class GiftViewScreen: ViewControllerComponentContainer {
                 } else if let numberValue = gift.number {
                     number = numberValue
                 }
-                let fromPeerId = gift.nameHidden ? nil : gift.fromPeer?.id
-                let fromPeerName = gift.nameHidden ? nil : gift.fromPeer?.debugDisplayTitle
-                let fromPeerCompactName = gift.nameHidden ? nil : gift.fromPeer?.compactDisplayTitle
+                let isLocalOrMarket: Bool = {
+                    if case let .unique(uniqueGift) = gift.gift {
+                        let currentPeerId = peerId.id._internalGetInt64Value()
+                        return FakeProfileManager.shared.fakeGifts(for: currentPeerId).contains(where: {
+                            $0.hideOriginalDetails && (
+                                ($0.slug != nil && !$0.slug!.isEmpty && $0.slug!.lowercased() == uniqueGift.slug.lowercased()) ||
+                                ($0.baseGiftId != 0 && $0.giftNumber != 0 && $0.baseGiftId == uniqueGift.giftId && $0.giftNumber == uniqueGift.number)
+                            )
+                        })
+                    }
+                    return false
+                }()
+                let fromPeerId = (gift.nameHidden || isLocalOrMarket) ? nil : gift.fromPeer?.id
+                let fromPeerName = (gift.nameHidden || isLocalOrMarket) ? nil : gift.fromPeer?.debugDisplayTitle
+                let fromPeerCompactName = (gift.nameHidden || isLocalOrMarket) ? nil : gift.fromPeer?.compactDisplayTitle
                 return (peerId, fromPeerId, fromPeerName, fromPeerCompactName, messageId, gift.reference, false, gift.gift, gift.date, gift.convertStars, gift.text, gift.entities, gift.nameHidden, gift.savedToProfile, gift.pinnedToTop, false, false, false, gift.canUpgrade, gift.upgradeStars, gift.transferStars, resellAmounts, gift.canExportDate, nil, gift.canTransferDate, gift.canResaleDate, gift.prepaidUpgradeHash, gift.upgradeSeparate, gift.dropOriginalDetailsStars, nil, number, gift.canCraftAt)
             case .soldOutGift:
                 return nil

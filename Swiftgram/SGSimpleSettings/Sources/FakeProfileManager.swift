@@ -40,6 +40,8 @@ public struct FakeStarGiftItem: Codable, Equatable, Hashable, Sendable {
     public var patternColor: Int32?
     public var textColor: Int32?
     public var upgradeStars: Int64?
+    public var rawUniqueGiftData: Data?
+    public var hideOriginalDetails: Bool
 
     public init(
         id: UUID = UUID(),
@@ -66,7 +68,9 @@ public struct FakeStarGiftItem: Codable, Equatable, Hashable, Sendable {
         outerColor: Int32? = nil,
         patternColor: Int32? = nil,
         textColor: Int32? = nil,
-        upgradeStars: Int64? = nil
+        upgradeStars: Int64? = nil,
+        rawUniqueGiftData: Data? = nil,
+        hideOriginalDetails: Bool = false
     ) {
         self.id = id
         self.baseGiftId = baseGiftId
@@ -93,6 +97,8 @@ public struct FakeStarGiftItem: Codable, Equatable, Hashable, Sendable {
         self.patternColor = patternColor
         self.textColor = textColor
         self.upgradeStars = upgradeStars
+        self.rawUniqueGiftData = rawUniqueGiftData
+        self.hideOriginalDetails = hideOriginalDetails
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -100,12 +106,13 @@ public struct FakeStarGiftItem: Codable, Equatable, Hashable, Sendable {
         case canTransfer, canResell, ownerPeerId, isPinned, isWorn
         case resellPriceStars, resellPriceTon, senderPeerId, senderName, sendDate, canCraft
         case isUpgraded, canUpgrade, title, slug, innerColor, outerColor, patternColor, textColor, upgradeStars
+        case rawUniqueGiftData, hideOriginalDetails
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.id = try c.decode(UUID.self, forKey: .id)
-        self.baseGiftId = try c.decode(Int64.self, forKey: .baseGiftId)
+        self.id = (try? c.decode(UUID.self, forKey: .id)) ?? UUID()
+        self.baseGiftId = (try? c.decode(Int64.self, forKey: .baseGiftId)) ?? 0
         self.backdropColorHex = (try? c.decode(String.self, forKey: .backdropColorHex)) ?? "#D4AF37"
         self.patternName = (try? c.decode(String.self, forKey: .patternName)) ?? "Star"
         self.giftNumber = (try? c.decode(Int32.self, forKey: .giftNumber)) ?? 1
@@ -129,6 +136,8 @@ public struct FakeStarGiftItem: Codable, Equatable, Hashable, Sendable {
         self.patternColor = try? c.decodeIfPresent(Int32.self, forKey: .patternColor)
         self.textColor = try? c.decodeIfPresent(Int32.self, forKey: .textColor)
         self.upgradeStars = try? c.decodeIfPresent(Int64.self, forKey: .upgradeStars)
+        self.rawUniqueGiftData = try? c.decodeIfPresent(Data.self, forKey: .rawUniqueGiftData)
+        self.hideOriginalDetails = (try? c.decodeIfPresent(Bool.self, forKey: .hideOriginalDetails)) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -158,6 +167,8 @@ public struct FakeStarGiftItem: Codable, Equatable, Hashable, Sendable {
         try c.encodeIfPresent(self.patternColor, forKey: .patternColor)
         try c.encodeIfPresent(self.textColor, forKey: .textColor)
         try c.encodeIfPresent(self.upgradeStars, forKey: .upgradeStars)
+        try c.encodeIfPresent(self.rawUniqueGiftData, forKey: .rawUniqueGiftData)
+        try c.encode(self.hideOriginalDetails, forKey: .hideOriginalDetails)
     }
 }
 

@@ -600,6 +600,13 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
                         }
                     }
                     
+                    let cleanAttributes = uniqueGift.attributes.filter { $0.attributeType != .originalInfo }
+                    let cleanGift = uniqueGift
+                        .withAttributes(cleanAttributes)
+                        .withOwner(.peerId(EnginePeer.Id(currentPeerId)))
+                        .withResellAmounts(nil)
+                        .withResellForTonOnly(false)
+                    
                     let item = FakeStarGiftItem(
                         id: UUID(),
                         baseGiftId: uniqueGift.giftId,
@@ -625,7 +632,9 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
                         outerColor: outerColor,
                         patternColor: patternColor,
                         textColor: textColor,
-                        upgradeStars: nil
+                        upgradeStars: nil,
+                        rawUniqueGiftData: cleanGift.serialize(),
+                        hideOriginalDetails: true
                     )
                     FakeProfileManager.shared.addGift(item, for: currentPeerId)
                     updateState()
@@ -655,7 +664,9 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
                         outerColor: nil,
                         patternColor: nil,
                         textColor: nil,
-                        upgradeStars: nil
+                        upgradeStars: nil,
+                        rawUniqueGiftData: nil,
+                        hideOriginalDetails: true
                     )
                     FakeProfileManager.shared.addGift(item, for: currentPeerId)
                     updateState()
@@ -802,6 +813,8 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
         )
         
         return (controllerState, (listState, arguments))
+    } |> afterDisposed {
+        actionsDisposable.dispose()
     }
     
     let controller = ItemListController(context: context, state: signal)
