@@ -1421,9 +1421,7 @@ final class UserAppearanceScreenComponent: Component {
                                     FakeProfileManager.shared.resetProfileColor(for: currentPeerId)
                                     let _ = component.context.account.postbox.transaction { transaction in
                                         if let user = transaction.getPeer(component.context.account.peerId) as? TelegramUser {
-                                            transaction.updatePeer(component.context.account.peerId, update: { _ in
-                                                return user.withUpdatedProfileColor(nil).withUpdatedProfileBackgroundEmojiId(nil)
-                                            })
+                                            updatePeersCustom(transaction: transaction, peers: [user.withUpdatedProfileColor(nil).withUpdatedProfileBackgroundEmojiId(nil)], update: { _, updated in updated })
                                         }
                                     }.start()
                                     self.selectedProfileGift = nil
