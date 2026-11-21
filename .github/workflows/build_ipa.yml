@@ -74,12 +74,57 @@ jobs:
           ln -sfn "$GITHUB_WORKSPACE" /Users/Shared/telegram-ios
 
       - name: Compile and Build App with Fake Codesigning
+        env:
+          CUSTOM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          CUSTOM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
         run: |
           set -e
-          set -x
           SOURCE_DIR=/Users/Shared/telegram-ios
           BAZEL_USER_ROOT="/private/var/tmp/_bazel_containerhost"
           cd "$SOURCE_DIR"
+
+          # Безопасная инъекция ключей Telegram API из GitHub Secrets (без вывода в консоль)
+          if [ -n "$CUSTOM_API_ID" ] && [ -n "$CUSTOM_API_HASH" ]; then
+            python3 -c '
+import json, os, re
+api_id = os.environ.get("CUSTOM_API_ID", "").strip()
+api_hash = os.environ.get("CUSTOM_API_HASH", "").strip()
+if api_id and api_hash:
+    for path in ["build-system/appstore-configuration.json"]:
+        try:
+            with open(path, "r") as f:
+                d = json.load(f)
+            d["api_id"] = str(api_id)
+            d["api_hash"] = str(api_hash)
+            with open(path, "w") as f:
+                json.dump(d, f, indent=4)
+        except Exception:
+            pass
+    for path in ["Telegram/Telegram-iOS/Config-AppStoreLLC.xcconfig", "Telegram/Telegram-iOS/Config-Fork.xcconfig"]:
+        try:
+            with open(path, "r") as f:
+                c = f.read()
+            c = re.sub(r"APP_CONFIG_API_ID=\d+", f"APP_CONFIG_API_ID={api_id}", c)
+            c = re.sub(r"APP_CONFIG_API_HASH=\\\"[^\\\"]*\\\"", f"APP_CONFIG_API_HASH=\\\"{api_hash}\\\"", c)
+            with open(path, "w") as f:
+                f.write(c)
+        except Exception:
+            pass
+    for path in ["build-system/example-configuration/variables.bzl"]:
+        try:
+            with open(path, "r") as f:
+                c = f.read()
+            c = re.sub(r"telegram_api_id\s*=\s*\"[^\"]*\"", f"telegram_api_id = \"{api_id}\"", c)
+            c = re.sub(r"telegram_api_hash\s*=\s*\"[^\"]*\"", f"telegram_api_hash = \"{api_hash}\"", c)
+            with open(path, "w") as f:
+                f.write(c)
+        except Exception:
+            pass
+'
+            echo "Telegram API credentials successfully injected from GitHub Secrets."
+          fi
+
+          set -x
 
           BUILD_NUMBER_OFFSET=0
           if [ -f build_number_offset ]; then
