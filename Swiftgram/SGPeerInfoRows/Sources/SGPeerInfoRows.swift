@@ -156,25 +156,7 @@ func sgPeerInfoSettingsProfileIdItems(data: PeerInfoScreenData, interaction: Pee
 }
 
 func sgPeerInfoSettingsItems(context: AccountContext, paymentsEnabled: Bool, presentationData: PresentationData, interaction: PeerInfoInteraction) -> [PeerInfoScreenItem] {
-    let hasNewFeatures = {
-        return false
-    }
-    let swiftgramLabel: PeerInfoScreenDisclosureItem.Label
-    if hasNewFeatures() {
-        swiftgramLabel = .titleBadge(presentationData.strings.Settings_New, presentationData.theme.list.itemAccentColor)
-    } else {
-        swiftgramLabel = .none
-    }
-
-    let hasNewProFeatures = {
-        return false
-    }
-    let swiftgramProLabel: PeerInfoScreenDisclosureItem.Label
-    if hasNewProFeatures() {
-        swiftgramProLabel = .titleBadge(presentationData.strings.Settings_New, presentationData.theme.list.itemAccentColor)
-    } else {
-        swiftgramProLabel = .none
-    }
+    let swiftgramLabel: PeerInfoScreenDisclosureItem.Label = .none
 
     var items: [PeerInfoScreenItem] = []
     items.append(PeerInfoScreenDisclosureItem(id: 1, label: swiftgramLabel, text: "Neogram", icon: PresentationResourcesSettings.swiftgram, action: {
