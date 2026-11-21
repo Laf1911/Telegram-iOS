@@ -118,8 +118,8 @@ func _internal_updateNameColorAndEmoji(account: Account, nameColor: UpdateNameCo
         inputRepliesColor = .peerColor(.init(flags: flags, color: color.rawValue, backgroundEmojiId: backgroundEmojiId))
         nameColorValue = .preset(color)
         backgroundEmojiIdValue = backgroundEmojiId
-        if FakeProfileManager.shared.isVisualPremium {
-            let currentPeerId = peerId.toInt64()
+        if FakeProfileManager.shared.isVisualPremium(for: peerId.id._internalGetInt64Value()) || FakeProfileManager.shared.isVisualPremium {
+            let currentPeerId = peerId.id._internalGetInt64Value()
             FakeProfileManager.shared.setFakeNameColor(color.rawValue, for: currentPeerId)
             FakeProfileManager.shared.setFakeReplyBackgroundEmojiId(backgroundEmojiId, for: currentPeerId)
         }
@@ -128,8 +128,8 @@ func _internal_updateNameColorAndEmoji(account: Account, nameColor: UpdateNameCo
         nameColorValue = .collectible(color)
         backgroundEmojiIdValue = color.backgroundEmojiId
     }
-    if FakeProfileManager.shared.isVisualPremium {
-        let currentPeerId = peerId.toInt64()
+    if FakeProfileManager.shared.isVisualPremium(for: peerId.id._internalGetInt64Value()) || FakeProfileManager.shared.isVisualPremium {
+        let currentPeerId = peerId.id._internalGetInt64Value()
         if let profileColor {
             FakeProfileManager.shared.setFakeProfileColor(profileColor.rawValue, for: currentPeerId)
         } else {

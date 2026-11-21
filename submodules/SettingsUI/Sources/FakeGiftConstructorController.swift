@@ -811,7 +811,7 @@ public func fakeGiftConstructorController(context: AccountContext, completion: @
                 giftNumber: state.giftNumber,
                 canTransfer: true,
                 canResell: true,
-                ownerPeerId: context.account.peerId.toInt64(),
+                ownerPeerId: context.account.peerId.id._internalGetInt64Value(),
                 isPinned: false,
                 isWorn: false,
                 resellPriceStars: nil,
@@ -821,7 +821,7 @@ public func fakeGiftConstructorController(context: AccountContext, completion: @
                 sendDate: Int32(Date().timeIntervalSince1970),
                 canCraft: true
             )
-            FakeProfileManager.shared.addGift(gift, for: context.account.peerId.toInt64())
+            FakeProfileManager.shared.addGift(gift, for: context.account.peerId.id._internalGetInt64Value())
             completion()
             dismissImpl?()
         }

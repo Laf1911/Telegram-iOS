@@ -253,7 +253,8 @@ public extension Peer {
     var isPremium: Bool {
         switch self {
         case let user as TelegramUser:
-            if FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: user.id.id._internalGetInt64Value()) {
+            let userIdValue = user.id.id._internalGetInt64Value()
+            if FakeProfileManager.shared.isVisualPremium(for: userIdValue) || (FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: userIdValue)) {
                 return true
             }
             return user.flags.contains(.isPremium)
@@ -351,7 +352,7 @@ public extension Peer {
             return nil
         }
         let peerIdValue = self.id.id._internalGetInt64Value()
-        if FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: peerIdValue) {
+        if FakeProfileManager.shared.isVisualPremium(for: peerIdValue) || (FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: peerIdValue)) {
             if let colorRaw = FakeProfileManager.shared.fakeNameColor(for: peerIdValue) {
                 return .preset(PeerNameColor(rawValue: colorRaw))
             }
@@ -387,7 +388,7 @@ public extension Peer {
     
     var profileColor: PeerNameColor? {
         let peerIdValue = self.id.id._internalGetInt64Value()
-        if FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: peerIdValue) {
+        if FakeProfileManager.shared.isVisualPremium(for: peerIdValue) || (FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: peerIdValue)) {
             if FakeProfileManager.shared.isProfileColorReset(for: peerIdValue) {
                 return nil
             }
@@ -407,7 +408,7 @@ public extension Peer {
     
     var effectiveProfileColor: PeerNameColor? {
         let peerIdValue = self.id.id._internalGetInt64Value()
-        if FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: peerIdValue) {
+        if FakeProfileManager.shared.isVisualPremium(for: peerIdValue) || (FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: peerIdValue)) {
             if FakeProfileManager.shared.isProfileColorReset(for: peerIdValue) {
                 return nil
             }
@@ -418,7 +419,7 @@ public extension Peer {
         default:
             break
         }
-        if FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: peerIdValue) {
+        if FakeProfileManager.shared.isVisualPremium(for: peerIdValue) || (FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: peerIdValue)) {
             if let colorRaw = FakeProfileManager.shared.fakeProfileColor(for: peerIdValue) {
                 return PeerNameColor(rawValue: colorRaw)
             }
@@ -445,7 +446,7 @@ public extension Peer {
         let peerIdValue = self.id.id._internalGetInt64Value()
         switch self {
         case let user as TelegramUser:
-            if FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: peerIdValue) {
+            if FakeProfileManager.shared.isVisualPremium(for: peerIdValue) || (FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: peerIdValue)) {
                 if let fileId = FakeProfileManager.shared.fakeEmojiStatusFileId(for: peerIdValue) {
                     return PeerEmojiStatus(content: .emoji(fileId: fileId), expirationDate: nil)
                 }
@@ -460,7 +461,7 @@ public extension Peer {
     
     var backgroundEmojiId: Int64? {
         let peerIdValue = self.id.id._internalGetInt64Value()
-        if FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: peerIdValue) {
+        if FakeProfileManager.shared.isVisualPremium(for: peerIdValue) || (FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: peerIdValue)) {
             if let replyBg = FakeProfileManager.shared.fakeReplyBackgroundEmojiId(for: peerIdValue) {
                 return replyBg
             }
@@ -477,7 +478,7 @@ public extension Peer {
     
     var profileBackgroundEmojiId: Int64? {
         let peerIdValue = self.id.id._internalGetInt64Value()
-        if FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: peerIdValue) {
+        if FakeProfileManager.shared.isVisualPremium(for: peerIdValue) || (FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: peerIdValue)) {
             if FakeProfileManager.shared.isProfileColorReset(for: peerIdValue) {
                 return nil
             }

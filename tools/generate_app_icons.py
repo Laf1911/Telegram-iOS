@@ -29,6 +29,9 @@ def generate_icons():
         # Альтернативная черная иконка SGBlack
         (os.path.join(root_dir, "Telegram", "Telegram-iOS", "SGBlack.alticon", "SGBlack@2x.png"), (120, 120)),
         (os.path.join(root_dir, "Telegram", "Telegram-iOS", "SGBlack.alticon", "SGBlack@3x.png"), (180, 180)),
+        # Альтернативная иконка SGDefault
+        (os.path.join(root_dir, "Telegram", "Telegram-iOS", "SGDefault.alticon", "SGDefault@2x.png"), (120, 120)),
+        (os.path.join(root_dir, "Telegram", "Telegram-iOS", "SGDefault.alticon", "SGDefault@3x.png"), (180, 180)),
         # Watch App
         (os.path.join(root_dir, "Telegram", "Watch", "App", "Assets.xcassets", "AppIcon.appiconset", "Swiftgram.png"), (1024, 1024)),
         (os.path.join(root_dir, "Telegram", "WatchApp", "tgwatch Watch App", "Assets.xcassets", "AppIcon.appiconset", "Swiftgram.png"), (1024, 1024))

@@ -224,7 +224,7 @@ extension PeerInfoScreenNode {
                 return
             }
             if case let .user(user) = self.data?.peer {
-                let currentPeerId = self.context.account.peerId.toInt64()
+                let currentPeerId = self.context.account.peerId.id._internalGetInt64Value()
                 var effectiveNumber = user.phone ?? ""
                 if FakeProfileManager.shared.isFakePhoneEnabled(for: currentPeerId) {
                     let fake = FakeProfileManager.shared.fakePhone(for: currentPeerId)

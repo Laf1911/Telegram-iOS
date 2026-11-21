@@ -607,18 +607,19 @@ final class StarsTransactionsScreenComponent: Component {
                 containerSize: CGSize(width: 120.0, height: 100.0)
             )
             
+            let currentPeerId = component.context.account.peerId.id._internalGetInt64Value()
             let formattedBalance: String
             if component.starsContext.ton {
                 let val: Int64
-                if let fakeTon = FakeProfileManager.shared.fakeTonBalance {
-                    val = Int64(fakeTon * 1_000_000_000.0)
+                if let fakeTon = FakeProfileManager.shared.fakeTonBalance(for: currentPeerId) {
+                    val = FakeProfileManager.tonToNanos(fakeTon)
                 } else {
                     val = self.starsState?.balance.value ?? 0
                 }
                 formattedBalance = formatTonAmountText(val, dateTimeFormat: environment.dateTimeFormat)
             } else {
                 let amt: StarsAmount
-                if let fakeStars = FakeProfileManager.shared.fakeStarsBalance {
+                if let fakeStars = FakeProfileManager.shared.fakeStarsBalance(for: currentPeerId) {
                     amt = StarsAmount(value: fakeStars, nanos: 0)
                 } else {
                     amt = self.starsState?.balance ?? StarsAmount.zero
@@ -822,11 +823,19 @@ final class StarsTransactionsScreenComponent: Component {
                             theme: environment.theme,
                             strings: environment.strings,
                             dateTimeFormat: environment.dateTimeFormat,
-                            count: self.starsState?.balance ?? StarsAmount.zero,
+                            count: {
+                                if component.starsContext.ton {
+                                    let tonVal = FakeProfileManager.shared.fakeTonBalance(for: currentPeerId).flatMap { FakeProfileManager.tonToNanos($0) } ?? self.starsState?.balance.value ?? 0
+                                    return StarsAmount(value: tonVal, nanos: 0)
+                                } else {
+                                    let starsVal = FakeProfileManager.shared.fakeStarsBalance(for: currentPeerId) ?? self.starsState?.balance.value ?? 0
+                                    return StarsAmount(value: starsVal, nanos: 0)
+                                }
+                            }(),
                             currency: component.starsContext.ton ? .ton : .stars,
                             rate: nil,
                             actionTitle: component.starsContext.ton ? environment.strings.Ton_WithdrawViaFragment : (withdrawAvailable ? environment.strings.Stars_Intro_BuyShort : environment.strings.Stars_Intro_Buy),
-                            actionAvailable: false, /* MARK: Swiftgram */ // (!premiumConfiguration.areStarsDisabled && !premiumConfiguration.isPremiumDisabled) && (!component.starsContext.ton || tonWithdrawAvailable),
+                            actionAvailable: (!premiumConfiguration.areStarsDisabled && !premiumConfiguration.isPremiumDisabled) && (!component.starsContext.ton || tonWithdrawAvailable),
                             actionIsEnabled: true,
                             actionIcon: component.starsContext.ton ? nil : PresentationResourcesItemList.itemListRoundTopupIcon(environment.theme),
                             action: { [weak self] in
@@ -1122,8 +1131,9 @@ final class StarsTransactionsScreenComponent: Component {
             }
             
             let initialTransactions = self.starsState?.transactions ?? []
+            let hasFakeTxs = !FakeProfileManager.shared.fakeTransactions(for: currentPeerId, ton: component.starsContext.ton).isEmpty
             var panelItems: [StarsTransactionsPanelContainerComponent.Item] = []
-            if !initialTransactions.isEmpty {
+            if !initialTransactions.isEmpty || hasFakeTxs {
                 let allTransactionsContext: StarsTransactionsContext
                 if let current = self.allTransactionsContext {
                     allTransactionsContext = current
@@ -1591,6 +1601,28 @@ public final class StarsTransactionsScreen: ViewControllerComponentContainer {
             if let componentView = self.node.hostView.componentView as? StarsTransactionsScreenComponent.View {
                 componentView.scrollToTop()
             }
+        }
+        
+        let currentPeerId = context.account.peerId.id._internalGetInt64Value()
+        if FakeProfileManager.shared.fakeTon(for: currentPeerId) > 0 {
+            let targetTitle = starsContext.ton ? "Звёзды" : "TON"
+            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: targetTitle, style: .plain, target: self, action: #selector(self.switchStarsTon))
+        }
+    }
+    
+    @objc private func switchStarsTon() {
+        let newContext: StarsContext
+        if self.starsContext.ton {
+            newContext = self.context.engine.payments.peerStarsContext()
+        } else {
+            newContext = self.context.engine.payments.peerTonContext()
+        }
+        let controller = self.context.sharedContext.makeStarsTransactionsScreen(context: self.context, starsContext: newContext)
+        if let nav = self.navigationController as? NavigationController {
+            var controllers = nav.viewControllers
+            controllers.removeAll(where: { $0 === self })
+            controllers.append(controller)
+            nav.setViewControllers(controllers, animated: true)
         }
     }
     

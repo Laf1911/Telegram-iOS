@@ -1667,22 +1667,28 @@ func _internal_dropStarGiftOriginalDetails(account: Account, reference: StarGift
 }
 
 func _internal_transferStarGift(account: Account, prepaid: Bool, reference: StarGiftReference, peerId: EnginePeer.Id) -> Signal<Never, TransferStarGiftError> {
-    if case let .slug(slug) = reference, slug.hasPrefix("fake-gift-") {
-        let uuidStr = String(slug.dropFirst("fake-gift-".count))
-        if let uuid = UUID(uuidString: uuidStr) {
-            let sourcePeerId = account.peerId.toInt64()
-            let targetPeerId = peerId.toInt64()
+    if case let .slug(slug) = reference {
+        let sourcePeerId = account.peerId.id._internalGetInt64Value()
+        let targetPeerId = peerId.id._internalGetInt64Value()
+        let senderGifts = FakeProfileManager.shared.fakeGifts(for: sourcePeerId)
+        if let gift = senderGifts.first(where: { "fake-gift-\($0.id.uuidString)" == slug || $0.slug == slug }) {
             if !prepaid {
                 let starsBalance = FakeProfileManager.shared.fakeStars(for: sourcePeerId)
                 if starsBalance < 25 {
                     return .fail(.generic)
                 }
-                FakeProfileManager.shared.setFakeStars(starsBalance - 25, for: sourcePeerId)
+            }
+            let success = FakeProfileManager.shared.transferGift(id: gift.id, to: targetPeerId, from: sourcePeerId)
+            if !success {
+                return .fail(.generic)
+            }
+            if !prepaid {
+                let starsBalance = FakeProfileManager.shared.fakeStars(for: sourcePeerId)
+                FakeProfileManager.shared.setFakeStars(max(0, starsBalance - 25), for: sourcePeerId)
                 FakeProfileManager.shared.addTransaction(FakeTransactionItem(isTon: false, amount: 25, title: "Передача подарка", subtitle: "Комиссия за передачу", isIncoming: false), for: sourcePeerId)
             }
-            let _ = FakeProfileManager.shared.transferGift(id: uuid, to: targetPeerId, from: sourcePeerId)
+            return .complete()
         }
-        return .complete()
     }
     return account.postbox.transaction { transaction -> (Api.InputPeer, Api.InputSavedStarGift)? in
         guard let inputPeer = transaction.getPeer(peerId).flatMap(apiInputPeer), let starGift = reference.apiStarGiftReference(transaction: transaction) else {
@@ -1736,6 +1742,35 @@ func _internal_transferStarGift(account: Account, prepaid: Bool, reference: Star
 }
 
 func _internal_upgradeStarGift(account: Account, formId: Int64?, reference: StarGiftReference, keepOriginalInfo: Bool) -> Signal<ProfileGiftsContext.State.StarGift, UpgradeStarGiftError> {
+    let currentPeerId = account.peerId.id._internalGetInt64Value()
+    var gifts = FakeProfileManager.shared.fakeGifts(for: currentPeerId)
+    var targetIndex: Int?
+    if case let .slug(slug) = reference {
+        targetIndex = gifts.firstIndex(where: { "fake-gift-\($0.id.uuidString)" == slug || $0.slug == slug })
+    }
+    if let idx = targetIndex {
+        let upgradePrice = gifts[idx].upgradeStars ?? 500
+        let currentStars = FakeProfileManager.shared.fakeStars(for: currentPeerId)
+        if currentStars >= upgradePrice {
+            FakeProfileManager.shared.setFakeStars(max(0, currentStars - upgradePrice), for: currentPeerId)
+            let tx = FakeTransactionItem(
+                id: UUID().uuidString,
+                isTon: false,
+                amount: upgradePrice,
+                title: "Улучшение подарка",
+                subtitle: "Превращение в NFT",
+                date: Int32(Date().timeIntervalSince1970),
+                isIncoming: false
+            )
+            FakeProfileManager.shared.addTransaction(tx, for: currentPeerId)
+        }
+        gifts[idx].isUpgraded = true
+        gifts[idx].canUpgrade = false
+        FakeProfileManager.shared.setFakeGifts(gifts, for: currentPeerId)
+        let resultGift = generateSingleFakeStarGift(item: gifts[idx], targetPeerId: account.peerId, crafted: false)
+        return .single(resultGift)
+    }
+
     let signal: Signal<ProfileGiftsContext.State.StarGift, UpgradeStarGiftError>
     if let formId {
         let source: BotPaymentInvoiceSource = .starGiftUpgrade(keepOriginalInfo: keepOriginalInfo, reference: reference)
@@ -2058,23 +2093,82 @@ private func generateSingleFakeStarGift(item: FakeStarGiftItem, targetPeerId: En
     )
     let realFile = StarGiftsRealMediaCache.shared.file(for: item.baseGiftId) ?? fallbackFile
     
+    let bytes = item.id.uuid
+    let raw = (UInt64(bytes.0) << 56) |
+              (UInt64(bytes.1) << 48) |
+              (UInt64(bytes.2) << 40) |
+              (UInt64(bytes.3) << 32) |
+              (UInt64(bytes.4) << 24) |
+              (UInt64(bytes.5) << 16) |
+              (UInt64(bytes.6) << 8)  |
+              UInt64(bytes.7)
+    let deterministicId = Int64(raw & 0x7FFF_FFFF_FFFF_FFFF)
+    let giftSlug = item.slug ?? "fake-gift-\(item.id.uuidString)"
+    
+    if !item.isUpgraded {
+        let genericGift = StarGift.Gift(
+            id: item.baseGiftId != 0 ? item.baseGiftId : deterministicId,
+            title: item.title ?? item.patternName,
+            file: realFile,
+            price: 100,
+            convertStars: 85,
+            availability: nil,
+            soldOut: false,
+            flags: [],
+            upgradeStars: item.upgradeStars ?? 500,
+            releasedBy: nil,
+            perUserLimit: nil,
+            lockedUntilDate: nil,
+            auctionSlug: nil,
+            auctionGiftsPerRound: nil,
+            auctionStartDate: nil,
+            upgradeVariantsCount: nil,
+            background: nil
+        )
+        return ProfileGiftsContext.State.StarGift(
+            gift: .generic(genericGift),
+            reference: .slug(slug: giftSlug),
+            fromPeer: nil,
+            date: item.sendDate != 0 ? item.sendDate : Int32(Date().timeIntervalSince1970 - 86400 * 7),
+            text: nil,
+            entities: nil,
+            nameHidden: false,
+            savedToProfile: true,
+            pinnedToTop: item.isPinned,
+            convertStars: 85,
+            canUpgrade: item.canUpgrade,
+            canExportDate: nil,
+            upgradeStars: item.upgradeStars ?? 500,
+            transferStars: item.canTransfer ? 25 : nil,
+            canTransferDate: item.canTransfer ? 0 : nil,
+            canResaleDate: item.canResell ? 0 : nil,
+            collectionIds: nil,
+            prepaidUpgradeHash: nil,
+            upgradeSeparate: false,
+            dropOriginalDetailsStars: nil,
+            number: item.giftNumber,
+            isRefunded: false,
+            canCraftAt: nil
+        )
+    }
+    
     let backdropAttr = StarGift.UniqueGift.Attribute.backdrop(
         name: "Backdrop",
         id: 1,
-        innerColor: backdropColor,
-        outerColor: backdropColor,
-        patternColor: backdropColor,
-        textColor: -1,
+        innerColor: item.innerColor ?? backdropColor,
+        outerColor: item.outerColor ?? backdropColor,
+        patternColor: item.patternColor ?? backdropColor,
+        textColor: item.textColor ?? -1,
         rarity: crafted ? .legendary : .rare
     )
     let modelAttr = StarGift.UniqueGift.Attribute.model(
-        name: item.patternName,
+        name: item.title ?? item.patternName,
         file: realFile,
         rarity: crafted ? .legendary : .rare,
         crafted: crafted
     )
     let patternAttr = StarGift.UniqueGift.Attribute.pattern(
-        name: item.patternName,
+        name: item.title ?? item.patternName,
         file: realFile,
         rarity: crafted ? .legendary : .rare
     )
@@ -2095,22 +2189,10 @@ private func generateSingleFakeStarGift(item: FakeStarGiftItem, targetPeerId: En
         resellAmounts.append(CurrencyAmount(amount: StarsAmount(value: tonNanos, nanos: 0), currency: .ton))
     }
     
-    let bytes = item.id.uuid
-    let rawId: Int64 = (Int64(bytes.0) << 56) |
-                       (Int64(bytes.1) << 48) |
-                       (Int64(bytes.2) << 40) |
-                       (Int64(bytes.3) << 32) |
-                       (Int64(bytes.4) << 24) |
-                       (Int64(bytes.5) << 16) |
-                       (Int64(bytes.6) << 8)  |
-                       Int64(bytes.7)
-    let deterministicId: Int64 = rawId > 0 ? rawId : (rawId == Int64.min ? Int64.max : -rawId)
-    
-    let giftSlug = "fake-gift-\(item.id.uuidString)"
     let uniqueGift = StarGift.UniqueGift(
         id: deterministicId,
-        giftId: deterministicId,
-        title: item.patternName,
+        giftId: item.baseGiftId != 0 ? item.baseGiftId : deterministicId,
+        title: item.title ?? item.patternName,
         number: item.giftNumber,
         slug: giftSlug,
         owner: .peerId(targetPeerId),
@@ -2142,7 +2224,7 @@ private func generateSingleFakeStarGift(item: FakeStarGiftItem, targetPeerId: En
         savedToProfile: true,
         pinnedToTop: item.isPinned,
         convertStars: nil,
-        canUpgrade: item.canCraft,
+        canUpgrade: false,
         canExportDate: nil,
         upgradeStars: nil,
         transferStars: item.canTransfer ? 25 : nil,
@@ -2159,7 +2241,7 @@ private func generateSingleFakeStarGift(item: FakeStarGiftItem, targetPeerId: En
 }
 
 private func generateFakeSavedStarGifts(targetPeerId: EnginePeer.Id) -> [ProfileGiftsContext.State.StarGift] {
-    let fakeItems = FakeProfileManager.shared.fakeGifts(for: targetPeerId.toInt64())
+    let fakeItems = FakeProfileManager.shared.fakeGifts(for: targetPeerId.id._internalGetInt64Value())
     guard !fakeItems.isEmpty else {
         return []
     }
@@ -2517,10 +2599,11 @@ private final class ProfileGiftsContextImpl {
             effectiveReferences = filteredPinnedGifts.compactMap { $0.reference }
         }
 
-        if case let .slug(slug) = reference, slug.hasPrefix("fake-gift-") {
-            let uuidStr = String(slug.dropFirst("fake-gift-".count))
-            if let uuid = UUID(uuidString: uuidStr) {
-                FakeProfileManager.shared.togglePinGift(id: uuid, for: self.peerId.toInt64())
+        if case let .slug(slug) = reference {
+            let targetPeerId = self.peerId.id._internalGetInt64Value()
+            let gifts = FakeProfileManager.shared.fakeGifts(for: targetPeerId)
+            if let gift = gifts.first(where: { "fake-gift-\($0.id.uuidString)" == slug || $0.slug == slug }) {
+                FakeProfileManager.shared.togglePinGift(id: gift.id, isPinned: pinnedToTop, for: targetPeerId)
             }
         }
 
@@ -2985,8 +3068,14 @@ private final class ProfileGiftsContextImpl {
         let fakeList = generateFakeSavedStarGifts(targetPeerId: self.peerId)
         if !fakeList.isEmpty {
             allGifts = fakeList + allGifts
-            if self.filter == .All || self.filter.contains(.unique) {
+            if self.filter == .All {
                 effectiveGifts = fakeList + effectiveGifts
+            } else if self.filter.contains(.unique) {
+                let uniqueFakeList = fakeList.filter {
+                    if case .unique = $0.gift { return true }
+                    return false
+                }
+                effectiveGifts = uniqueFakeList + effectiveGifts
             }
         }
         
@@ -3695,7 +3784,7 @@ private final class CraftGiftsContextImpl {
 
     private func pushState() {
         var effectiveGifts = self.gifts
-        let fakeCraftable = FakeProfileManager.shared.fakeGifts(for: self.account.peerId.toInt64()).filter { $0.canCraft }
+        let fakeCraftable = FakeProfileManager.shared.fakeGifts(for: self.account.peerId.id._internalGetInt64Value()).filter { $0.canCraft }
         if !fakeCraftable.isEmpty {
             let mappedFake = fakeCraftable.map { generateSingleFakeStarGift(item: $0, targetPeerId: self.account.peerId, crafted: false) }
             effectiveGifts = mappedFake + effectiveGifts
@@ -3816,7 +3905,7 @@ func _internal_craftStarGift(account: Account, references: [StarGiftReference]) 
         guard fakeSlugs.count >= 2 && fakeSlugs.count <= 4 else {
             return .fail(.generic)
         }
-        let currentPeerId = account.peerId.toInt64()
+        let currentPeerId = account.peerId.id._internalGetInt64Value()
         var currentGifts = FakeProfileManager.shared.fakeGifts(for: currentPeerId)
         let fakeUuids = Set(fakeSlugs.compactMap { UUID(uuidString: String($0.dropFirst("fake-gift-".count))) })
         
@@ -3829,12 +3918,13 @@ func _internal_craftStarGift(account: Account, references: [StarGiftReference]) 
         // Удаляем ингредиенты крафта
         currentGifts.removeAll { fakeUuids.contains($0.id) }
         
-        // Создаем скрафченный подарок высокой редкости (.legendary)
+        let sample = matchingGifts.first
+        // Создаем скрафченный подарок высокой редкости (.legendary) той же коллекции
         let craftedItem = FakeStarGiftItem(
             id: UUID(),
-            baseGiftId: 1003,
-            backdropColorHex: "#7C3AED",
-            patternName: "Crafted Gem",
+            baseGiftId: sample?.baseGiftId ?? 1003,
+            backdropColorHex: sample?.backdropColorHex ?? "#7C3AED",
+            patternName: sample?.patternName ?? "Crafted Gem",
             giftNumber: Int32.random(in: 1...99),
             canTransfer: true,
             canResell: true,
@@ -3846,7 +3936,15 @@ func _internal_craftStarGift(account: Account, references: [StarGiftReference]) 
             senderPeerId: nil,
             senderName: nil,
             sendDate: Int32(Date().timeIntervalSince1970),
-            canCraft: false
+            canCraft: false,
+            isUpgraded: true,
+            title: sample?.title ?? sample?.patternName,
+            slug: nil,
+            innerColor: sample?.innerColor,
+            outerColor: sample?.outerColor,
+            patternColor: sample?.patternColor,
+            textColor: sample?.textColor,
+            upgradeStars: nil
         )
         currentGifts.insert(craftedItem, at: 0)
         FakeProfileManager.shared.setFakeGifts(currentGifts, for: currentPeerId)
@@ -4497,7 +4595,7 @@ func _internal_updateStarGiftResalePrice(account: Account, reference: StarGiftRe
     if case let .slug(slug) = reference, slug.hasPrefix("fake-gift-") {
         let uuidStr = String(slug.dropFirst("fake-gift-".count))
         if let uuid = UUID(uuidString: uuidStr) {
-            let currentPeerId = account.peerId.toInt64()
+            let currentPeerId = account.peerId.id._internalGetInt64Value()
             var gifts = FakeProfileManager.shared.fakeGifts(for: currentPeerId)
             if let index = gifts.firstIndex(where: { $0.id == uuid }) {
                 var gift = gifts[index]

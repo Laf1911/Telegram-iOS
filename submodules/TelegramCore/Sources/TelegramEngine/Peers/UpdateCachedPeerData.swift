@@ -505,7 +505,7 @@ func _internal_fetchAndUpdateCachedPeerData(accountPeerId: PeerId, peerId rawPee
                                             .withUpdatedPersonalChannel(personalChannel)
                                             .withUpdatedBotPreview(botPreview)
                                             .withUpdatedStarGiftsCount({
-                                                let localCount = FakeProfileManager.shared.fakeGifts(for: peerId.toInt64()).count
+                                                let localCount = FakeProfileManager.shared.fakeGifts(for: peerId.id._internalGetInt64Value()).count
                                                 return localCount > 0 ? max(starGiftsCount ?? 0, Int32(localCount)) : starGiftsCount
                                             }())
                                             .withUpdatedStarRefProgram(mappedStarRefProgram)
@@ -966,7 +966,7 @@ func _internal_fetchAndUpdateCachedPeerData(accountPeerId: PeerId, peerId rawPee
                                                     .withUpdatedEmojiPack(emojiPack)
                                                     .withUpdatedVerification(verification)
                                                     .withUpdatedStarGiftsCount({
-                                                        let localCount = FakeProfileManager.shared.fakeGifts(for: peerId.toInt64()).count
+                                                        let localCount = FakeProfileManager.shared.fakeGifts(for: peerId.id._internalGetInt64Value()).count
                                                         return localCount > 0 ? max(starGiftsCount ?? 0, Int32(localCount)) : starGiftsCount
                                                     }())
                                                     .withUpdatedSendPaidMessageStars(mappedSendPaidMessageStars)

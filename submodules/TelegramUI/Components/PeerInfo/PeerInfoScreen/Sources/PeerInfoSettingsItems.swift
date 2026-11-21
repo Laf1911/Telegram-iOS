@@ -304,7 +304,7 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
             interaction.openSettings(.premium)
         }))
     }
-    let currentPeerId = context.account.peerId.toInt64()
+    let currentPeerId = context.account.peerId.id._internalGetInt64Value()
     var effectiveStarsState = data.starsState
     if let fakeStars = FakeProfileManager.shared.fakeStarsBalance(for: currentPeerId) {
         effectiveStarsState = StarsContext.State(flags: effectiveStarsState?.flags ?? [], balance: StarsAmount(value: fakeStars, nanos: 0), subscriptions: effectiveStarsState?.subscriptions ?? [], canLoadMoreSubscriptions: false, transactions: effectiveStarsState?.transactions ?? [], canLoadMoreTransactions: false, isLoading: false)
@@ -353,13 +353,9 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
             interaction.openSettings(.businessSetup)
         }))
     }
-    if let starsState = data.starsState {
-        if (!isPremiumDisabled || starsState.balance > StarsAmount.zero) && sgWebSettings.global.canGrant {
-            items[.payment]!.append(PeerInfoScreenDisclosureItem(id: 105, label: .text(""), text: "Telegram Gifts", icon: PresentationResourcesSettings.premiumGift, action: {
-                interaction.openSettings(.premiumGift)
-            }))
-        }
-    }
+    items[.payment]!.append(PeerInfoScreenDisclosureItem(id: 105, label: .text(""), text: "Telegram Gifts", icon: PresentationResourcesSettings.premiumGift, action: {
+        interaction.openSettings(.premiumGift)
+    }))
     
     if let settings = data.globalSettings {
         if settings.hasPassport {
@@ -501,7 +497,7 @@ func settingsEditingItems(data: PeerInfoScreenData?, state: PeerInfoState, conte
         }))
     }
     
-    let currentPeerId = context.account.peerId.toInt64()
+    let currentPeerId = context.account.peerId.id._internalGetInt64Value()
     if case let .user(user) = data.peer {
         var phone = user.phone
         if FakeProfileManager.shared.isFakePhoneEnabled(for: currentPeerId) {

@@ -10,6 +10,30 @@ import AccountContext
 import AlertUI
 import SGSimpleSettings
 
+private func parseGiftSlug(from input: String) -> String {
+    var raw = input.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let url = URL(string: raw), let lastComponent = url.pathComponents.last, !lastComponent.isEmpty, lastComponent != "/" {
+        raw = lastComponent
+    }
+    if let range = raw.range(of: "t.me/nft/") {
+        raw = String(raw[range.upperBound...])
+    }
+    if let queryIndex = raw.firstIndex(of: "?") {
+        raw = String(raw[..<queryIndex])
+    }
+    return raw.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+}
+
+private func parseSlugTitleAndNumber(slug: String) -> (String, Int32) {
+    let parts = slug.split(separator: "-")
+    if let last = parts.last, let num = Int32(last) {
+        let titleParts = parts.dropLast()
+        let title = titleParts.isEmpty ? "Gift" : titleParts.map { $0.capitalized }.joined(separator: " ")
+        return (title, num)
+    }
+    return (slug.capitalized, 1)
+}
+
 private final class FakeProfileSettingsArguments {
     let context: AccountContext
     let updateVisualPremium: (Bool) -> Void
@@ -20,12 +44,12 @@ private final class FakeProfileSettingsArguments {
     let updateFakePhone: (String) -> Void
     let updateFakePhonePriceTon: (Double) -> Void
     let updatePurchaseDate: (String?) -> Void
-    let updateChannelTitle: (String) -> Void
-    let updateBusinessLocation: (String) -> Void
-    let updateBusinessHours: (String) -> Void
     let addUsername: () -> Void
     let deleteUsername: (String) -> Void
-    let addGift: () -> Void
+    let addNftGiftByLink: () -> Void
+    let addUnupgradedGiftByLink: () -> Void
+    let openGiftStore: () -> Void
+    let addCustomGift: () -> Void
     let deleteGift: (UUID) -> Void
     
     init(
@@ -38,12 +62,12 @@ private final class FakeProfileSettingsArguments {
         updateFakePhone: @escaping (String) -> Void,
         updateFakePhonePriceTon: @escaping (Double) -> Void,
         updatePurchaseDate: @escaping (String?) -> Void,
-        updateChannelTitle: @escaping (String) -> Void,
-        updateBusinessLocation: @escaping (String) -> Void,
-        updateBusinessHours: @escaping (String) -> Void,
         addUsername: @escaping () -> Void,
         deleteUsername: @escaping (String) -> Void,
-        addGift: @escaping () -> Void,
+        addNftGiftByLink: @escaping () -> Void,
+        addUnupgradedGiftByLink: @escaping () -> Void,
+        openGiftStore: @escaping () -> Void,
+        addCustomGift: @escaping () -> Void,
         deleteGift: @escaping (UUID) -> Void
     ) {
         self.context = context
@@ -55,12 +79,12 @@ private final class FakeProfileSettingsArguments {
         self.updateFakePhone = updateFakePhone
         self.updateFakePhonePriceTon = updateFakePhonePriceTon
         self.updatePurchaseDate = updatePurchaseDate
-        self.updateChannelTitle = updateChannelTitle
-        self.updateBusinessLocation = updateBusinessLocation
-        self.updateBusinessHours = updateBusinessHours
         self.addUsername = addUsername
         self.deleteUsername = deleteUsername
-        self.addGift = addGift
+        self.addNftGiftByLink = addNftGiftByLink
+        self.addUnupgradedGiftByLink = addUnupgradedGiftByLink
+        self.openGiftStore = openGiftStore
+        self.addCustomGift = addCustomGift
         self.deleteGift = deleteGift
     }
 }
@@ -80,16 +104,13 @@ private enum FakeProfileEntry: ItemListNodeEntry {
     case tonBalanceInput(String, String)
     case premiumNotice(String)
     
-    // 2. Секция: Данные профиля (Номер, Канал, Бизнес)
+    // 2. Секция: Данные профиля (Номер, Юзернейм, Fragment)
     case profileDataHeader(String)
     case fakeMainUsernameInput(String, String)
     case fakePhoneToggle(Bool)
     case fakePhoneInput(String, String)
     case fakePhonePriceInput(String, String)
     case fakePurchaseDateInput(String, String)
-    case fakeChannelTitleInput(String, String)
-    case fakeBusinessLocationInput(String, String)
-    case fakeBusinessHoursInput(String, String)
     case profileDataNotice(String)
     
     // 3. Секция: NFT-юзернеймы
@@ -100,7 +121,10 @@ private enum FakeProfileEntry: ItemListNodeEntry {
     
     // 4. Секция: Подарки в профиле
     case giftsHeader(String)
-    case addGiftAction(String)
+    case addNftGiftAction(String)
+    case addUnupgradedGiftAction(String)
+    case openGiftStoreAction(String)
+    case addCustomGiftAction(String)
     case giftItem(index: Int, id: UUID, title: String, subtitle: String)
     case giftsNotice(String)
     
@@ -108,11 +132,11 @@ private enum FakeProfileEntry: ItemListNodeEntry {
         switch self {
         case .premiumHeader, .visualPremiumToggle, .starsBalanceInput, .tonBalanceInput, .premiumNotice:
             return FakeProfileSection.premiumAndStars.rawValue
-        case .profileDataHeader, .fakeMainUsernameInput, .fakePhoneToggle, .fakePhoneInput, .fakePhonePriceInput, .fakePurchaseDateInput, .fakeChannelTitleInput, .fakeBusinessLocationInput, .fakeBusinessHoursInput, .profileDataNotice:
+        case .profileDataHeader, .fakeMainUsernameInput, .fakePhoneToggle, .fakePhoneInput, .fakePhonePriceInput, .fakePurchaseDateInput, .profileDataNotice:
             return FakeProfileSection.profileData.rawValue
         case .nftUsernamesHeader, .addUsernameAction, .nftUsernameItem, .nftUsernamesNotice:
             return FakeProfileSection.nftUsernames.rawValue
-        case .giftsHeader, .addGiftAction, .giftItem, .giftsNotice:
+        case .giftsHeader, .addNftGiftAction, .addUnupgradedGiftAction, .openGiftStoreAction, .addCustomGiftAction, .giftItem, .giftsNotice:
             return FakeProfileSection.profileGifts.rawValue
         }
     }
@@ -142,30 +166,30 @@ private enum FakeProfileEntry: ItemListNodeEntry {
             return 2004
         case .fakePurchaseDateInput:
             return 2005
-        case .fakeChannelTitleInput:
-            return 2006
-        case .fakeBusinessLocationInput:
-            return 2007
-        case .fakeBusinessHoursInput:
-            return 2008
         case .profileDataNotice:
-            return 2009
+            return 2006
             
         case .nftUsernamesHeader:
             return 3000
         case .addUsernameAction:
             return 3001
-        case let .nftUsernameItem(index, _, _):
-            return 3100 + Int32(index)
+        case let .nftUsernameItem(_, username, _):
+            return 3100 + Int32(abs(username.hashValue % 800))
         case .nftUsernamesNotice:
             return 3999
             
         case .giftsHeader:
             return 4000
-        case .addGiftAction:
+        case .addNftGiftAction:
             return 4001
-        case let .giftItem(index, _, _, _):
-            return 4100 + Int32(index)
+        case .addUnupgradedGiftAction:
+            return 4002
+        case .openGiftStoreAction:
+            return 4003
+        case .addCustomGiftAction:
+            return 4004
+        case let .giftItem(_, id, _, _):
+            return 4100 + Int32(abs(id.hashValue % 800))
         case .giftsNotice:
             return 4999
         }
@@ -196,12 +220,6 @@ private enum FakeProfileEntry: ItemListNodeEntry {
             return t1 == t2 && v1 == v2
         case let (.fakePurchaseDateInput(t1, v1), .fakePurchaseDateInput(t2, v2)):
             return t1 == t2 && v1 == v2
-        case let (.fakeChannelTitleInput(t1, v1), .fakeChannelTitleInput(t2, v2)):
-            return t1 == t2 && v1 == v2
-        case let (.fakeBusinessLocationInput(t1, v1), .fakeBusinessLocationInput(t2, v2)):
-            return t1 == t2 && v1 == v2
-        case let (.fakeBusinessHoursInput(t1, v1), .fakeBusinessHoursInput(t2, v2)):
-            return t1 == t2 && v1 == v2
         case let (.profileDataNotice(t1), .profileDataNotice(t2)):
             return t1 == t2
             
@@ -216,7 +234,13 @@ private enum FakeProfileEntry: ItemListNodeEntry {
             
         case let (.giftsHeader(t1), .giftsHeader(t2)):
             return t1 == t2
-        case let (.addGiftAction(t1), .addGiftAction(t2)):
+        case let (.addNftGiftAction(t1), .addNftGiftAction(t2)):
+            return t1 == t2
+        case let (.addUnupgradedGiftAction(t1), .addUnupgradedGiftAction(t2)):
+            return t1 == t2
+        case let (.openGiftStoreAction(t1), .openGiftStoreAction(t2)):
+            return t1 == t2
+        case let (.addCustomGiftAction(t1), .addCustomGiftAction(t2)):
             return t1 == t2
         case let (.giftItem(i1, id1, t1, s1), .giftItem(i2, id2, t2, s2)):
             return i1 == i2 && id1 == id2 && t1 == t2 && s1 == s2
@@ -348,45 +372,6 @@ private enum FakeProfileEntry: ItemListNodeEntry {
                 },
                 action: {}
             )
-        case let .fakeChannelTitleInput(title, value):
-            return ItemListSingleLineInputItem(
-                presentationData: presentationData,
-                title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor),
-                text: value,
-                placeholder: "Название канала",
-                type: .regular(capitalization: true, autocorrection: false),
-                sectionId: self.section,
-                textUpdated: { text in
-                    args.updateChannelTitle(text.trimmingCharacters(in: .whitespacesAndNewlines))
-                },
-                action: {}
-            )
-        case let .fakeBusinessLocationInput(title, value):
-            return ItemListSingleLineInputItem(
-                presentationData: presentationData,
-                title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor),
-                text: value,
-                placeholder: "г. Москва, ул. Арбат, 1",
-                type: .regular(capitalization: true, autocorrection: true),
-                sectionId: self.section,
-                textUpdated: { text in
-                    args.updateBusinessLocation(text.trimmingCharacters(in: .whitespacesAndNewlines))
-                },
-                action: {}
-            )
-        case let .fakeBusinessHoursInput(title, value):
-            return ItemListSingleLineInputItem(
-                presentationData: presentationData,
-                title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor),
-                text: value,
-                placeholder: "Пн–Пт 09:00 – 18:00",
-                type: .regular(capitalization: true, autocorrection: false),
-                sectionId: self.section,
-                textUpdated: { text in
-                    args.updateBusinessHours(text.trimmingCharacters(in: .whitespacesAndNewlines))
-                },
-                action: {}
-            )
         case let .profileDataNotice(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section, style: .blocks)
             
@@ -426,7 +411,7 @@ private enum FakeProfileEntry: ItemListNodeEntry {
         // 4. Секция: Подарки в профиле
         case let .giftsHeader(text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
-        case let .addGiftAction(text):
+        case let .addNftGiftAction(text):
             return ItemListActionItem(
                 presentationData: presentationData,
                 title: text,
@@ -435,7 +420,43 @@ private enum FakeProfileEntry: ItemListNodeEntry {
                 sectionId: self.section,
                 style: .blocks,
                 action: {
-                    args.addGift()
+                    args.addNftGiftByLink()
+                }
+            )
+        case let .addUnupgradedGiftAction(text):
+            return ItemListActionItem(
+                presentationData: presentationData,
+                title: text,
+                kind: .generic,
+                alignment: .natural,
+                sectionId: self.section,
+                style: .blocks,
+                action: {
+                    args.addUnupgradedGiftByLink()
+                }
+            )
+        case let .openGiftStoreAction(text):
+            return ItemListActionItem(
+                presentationData: presentationData,
+                title: text,
+                kind: .generic,
+                alignment: .natural,
+                sectionId: self.section,
+                style: .blocks,
+                action: {
+                    args.openGiftStore()
+                }
+            )
+        case let .addCustomGiftAction(text):
+            return ItemListActionItem(
+                presentationData: presentationData,
+                title: text,
+                kind: .generic,
+                alignment: .natural,
+                sectionId: self.section,
+                style: .blocks,
+                action: {
+                    args.addCustomGift()
                 }
             )
         case let .giftItem(_, id, title, subtitle):
@@ -459,6 +480,10 @@ private enum FakeProfileEntry: ItemListNodeEntry {
 }
 
 public func fakeProfileSettingsController(context: AccountContext) -> ViewController {
+    let currentPeerId = context.account.peerId.id._internalGetInt64Value()
+    FakeProfileManager.shared.currentAccountPeerId = currentPeerId
+    
+    let actionsDisposable = DisposableSet()
     let statePromise = ValuePromise<Int>(0, ignoreRepeated: false)
     let stateValue = Atomic<Int>(value: 0)
     
@@ -472,39 +497,32 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
     let arguments = FakeProfileSettingsArguments(
         context: context,
         updateVisualPremium: { value in
-            FakeProfileManager.shared.isVisualPremium = value
+            FakeProfileManager.shared.setVisualPremium(value, for: currentPeerId)
             updateState()
         },
         updateStarsBalance: { balance in
-            FakeProfileManager.shared.fakeStarsBalance = balance
+            FakeProfileManager.shared.setFakeStarsBalance(balance, for: currentPeerId)
+            updateState()
         },
         updateTonBalance: { balance in
-            FakeProfileManager.shared.fakeTonBalance = balance
+            FakeProfileManager.shared.setFakeTonBalance(balance, for: currentPeerId)
+            updateState()
         },
         updateMainUsername: { username in
-            FakeProfileManager.shared.fakeMainUsername = username
+            FakeProfileManager.shared.setFakeMainUsername(username, for: currentPeerId)
         },
         updateFakePhoneEnabled: { value in
-            FakeProfileManager.shared.isFakePhoneEnabled = value
+            FakeProfileManager.shared.setFakePhoneEnabled(value, for: currentPeerId)
             updateState()
         },
         updateFakePhone: { phone in
-            FakeProfileManager.shared.fakePhone = phone
+            FakeProfileManager.shared.setFakePhone(phone, for: currentPeerId)
         },
         updateFakePhonePriceTon: { price in
-            FakeProfileManager.shared.fakePhonePriceTon = price
+            FakeProfileManager.shared.setFakePhonePriceTon(price, for: currentPeerId)
         },
         updatePurchaseDate: { date in
-            FakeProfileManager.shared.fakePurchaseDateString = date
-        },
-        updateChannelTitle: { title in
-            FakeProfileManager.shared.fakeChannelTitle = title
-        },
-        updateBusinessLocation: { location in
-            FakeProfileManager.shared.fakeBusinessLocation = location
-        },
-        updateBusinessHours: { hours in
-            FakeProfileManager.shared.fakeBusinessHours = hours
+            FakeProfileManager.shared.setFakePurchaseDateString(date, for: currentPeerId)
         },
         addUsername: {
             let alert = UIAlertController(
@@ -529,25 +547,186 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
                 let price = Double(rawPrice) ?? 0.0
                 guard !rawUsername.isEmpty else { return }
                 
-                let item = FakeNftUsername(username: rawUsername, priceTon: price, purchaseDate: FakeProfileManager.shared.fakePurchaseDateTimestamp)
-                FakeProfileManager.shared.addUsername(item)
+                let item = FakeNftUsername(username: rawUsername, priceTon: price, purchaseDate: FakeProfileManager.shared.fakePurchaseDateTimestamp(for: currentPeerId))
+                FakeProfileManager.shared.addUsername(item, for: currentPeerId)
                 updateState()
             }))
             
             context.sharedContext.mainWindow?.presentNative(alert)
         },
         deleteUsername: { username in
-            FakeProfileManager.shared.removeUsername(named: username)
+            FakeProfileManager.shared.removeUsername(named: username, for: currentPeerId)
             updateState()
         },
-        addGift: {
+        addNftGiftByLink: {
+            let alert = UIAlertController(
+                title: "Добавить NFT-подарок",
+                message: "Введите ссылку на подарок (например, https://t.me/nft/jelly-bunny-123) или его slug:",
+                preferredStyle: .alert
+            )
+            alert.addTextField { tf in
+                tf.placeholder = "https://t.me/nft/slug"
+                tf.autocapitalizationType = .none
+                tf.autocorrectionType = .no
+            }
+            alert.addAction(UIAlertAction(title: "Отмена", style: .cancel))
+            alert.addAction(UIAlertAction(title: "Добавить", style: .default, handler: { [weak alert] _ in
+                guard let fields = alert?.textFields, let text = fields.first?.text else { return }
+                let rawSlug = parseGiftSlug(from: text)
+                guard !rawSlug.isEmpty else { return }
+                
+                let (fallbackTitle, fallbackNum) = parseSlugTitleAndNumber(slug: rawSlug)
+                
+                actionsDisposable.add((context.engine.payments.getUniqueStarGift(slug: rawSlug)
+                |> deliverOnMainQueue).start(next: { uniqueGift in
+                    var innerColor: Int32?
+                    var outerColor: Int32?
+                    var patternColor: Int32?
+                    var textColor: Int32?
+                    
+                    for attr in uniqueGift.attributes {
+                        switch attr {
+                        case let .backdrop(_, _, inner, outer, pattern, text, _):
+                            innerColor = inner
+                            outerColor = outer
+                            patternColor = pattern
+                            textColor = text
+                        case let .model(_, file, _, _):
+                            StarGiftsRealMediaCache.shared.register(file: file, for: uniqueGift.giftId)
+                        case let .pattern(_, file, _):
+                            StarGiftsRealMediaCache.shared.register(file: file, for: uniqueGift.giftId)
+                        default:
+                            break
+                        }
+                    }
+                    
+                    let item = FakeStarGiftItem(
+                        id: UUID(),
+                        baseGiftId: uniqueGift.giftId,
+                        backdropColorHex: "#D4AF37",
+                        patternName: uniqueGift.title,
+                        giftNumber: uniqueGift.number,
+                        canTransfer: true,
+                        canResell: true,
+                        ownerPeerId: currentPeerId,
+                        isPinned: false,
+                        isWorn: false,
+                        resellPriceStars: 500,
+                        resellPriceTon: 10.0,
+                        senderPeerId: nil,
+                        senderName: nil,
+                        sendDate: Int32(Date().timeIntervalSince1970),
+                        canCraft: false,
+                        isUpgraded: true,
+                        canUpgrade: false,
+                        title: uniqueGift.title,
+                        slug: uniqueGift.slug,
+                        innerColor: innerColor,
+                        outerColor: outerColor,
+                        patternColor: patternColor,
+                        textColor: textColor,
+                        upgradeStars: nil
+                    )
+                    FakeProfileManager.shared.addGift(item, for: currentPeerId)
+                    updateState()
+                }, error: { _ in
+                    let item = FakeStarGiftItem(
+                        id: UUID(),
+                        baseGiftId: 0,
+                        backdropColorHex: "#D4AF37",
+                        patternName: fallbackTitle,
+                        giftNumber: fallbackNum,
+                        canTransfer: true,
+                        canResell: true,
+                        ownerPeerId: currentPeerId,
+                        isPinned: false,
+                        isWorn: false,
+                        resellPriceStars: 500,
+                        resellPriceTon: 10.0,
+                        senderPeerId: nil,
+                        senderName: nil,
+                        sendDate: Int32(Date().timeIntervalSince1970),
+                        canCraft: false,
+                        isUpgraded: true,
+                        canUpgrade: false,
+                        title: fallbackTitle,
+                        slug: rawSlug,
+                        innerColor: nil,
+                        outerColor: nil,
+                        patternColor: nil,
+                        textColor: nil,
+                        upgradeStars: nil
+                    )
+                    FakeProfileManager.shared.addGift(item, for: currentPeerId)
+                    updateState()
+                })
+            }))
+            
+            context.sharedContext.mainWindow?.presentNative(alert)
+        },
+        addUnupgradedGiftByLink: {
+            let alert = UIAlertController(
+                title: "Добавить обычный подарок",
+                message: "Введите ссылку или название подарка (для отображения кнопки «Улучшить»):",
+                preferredStyle: .alert
+            )
+            alert.addTextField { tf in
+                tf.placeholder = "Например, Star или https://t.me/nft/star"
+                tf.autocapitalizationType = .none
+                tf.autocorrectionType = .no
+            }
+            alert.addAction(UIAlertAction(title: "Отмена", style: .cancel))
+            alert.addAction(UIAlertAction(title: "Добавить", style: .default, handler: { [weak alert] _ in
+                guard let fields = alert?.textFields, let text = fields.first?.text else { return }
+                let rawSlug = parseGiftSlug(from: text)
+                guard !rawSlug.isEmpty else { return }
+                let (fallbackTitle, fallbackNum) = parseSlugTitleAndNumber(slug: rawSlug)
+                
+                let item = FakeStarGiftItem(
+                    id: UUID(),
+                    baseGiftId: 0,
+                    backdropColorHex: "#5B8BF5",
+                    patternName: fallbackTitle,
+                    giftNumber: fallbackNum,
+                    canTransfer: true,
+                    canResell: true,
+                    ownerPeerId: currentPeerId,
+                    isPinned: false,
+                    isWorn: false,
+                    resellPriceStars: nil,
+                    resellPriceTon: nil,
+                    senderPeerId: nil,
+                    senderName: nil,
+                    sendDate: Int32(Date().timeIntervalSince1970),
+                    canCraft: false,
+                    isUpgraded: false,
+                    canUpgrade: true,
+                    title: fallbackTitle,
+                    slug: rawSlug,
+                    innerColor: nil,
+                    outerColor: nil,
+                    patternColor: nil,
+                    textColor: nil,
+                    upgradeStars: 500
+                )
+                FakeProfileManager.shared.addGift(item, for: currentPeerId)
+                updateState()
+            }))
+            
+            context.sharedContext.mainWindow?.presentNative(alert)
+        },
+        openGiftStore: {
+            let giftsController = context.sharedContext.makePremiumGiftController(context: context, source: .settings([]), completion: nil)
+            presentControllerImpl?(giftsController, ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
+        },
+        addCustomGift: {
             let constructor = fakeGiftConstructorController(context: context, completion: {
                 updateState()
             })
             presentControllerImpl?(constructor, ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
         },
         deleteGift: { id in
-            FakeProfileManager.shared.removeGift(id: id)
+            FakeProfileManager.shared.removeGift(id: id, for: currentPeerId)
             updateState()
         }
     )
@@ -562,10 +741,10 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
         
         // 1. Секция: Telegram Premium и Звезды
         entries.append(.premiumHeader("TELEGRAM PREMIUM, ЗВЕЗДЫ И TON"))
-        entries.append(.visualPremiumToggle(manager.isVisualPremium))
-        let starsText = manager.fakeStarsBalance.flatMap { "\($0)" } ?? ""
+        entries.append(.visualPremiumToggle(manager.isVisualPremium(for: currentPeerId)))
+        let starsText = manager.fakeStarsBalance(for: currentPeerId).flatMap { "\($0)" } ?? ""
         entries.append(.starsBalanceInput("Баланс Звезд", starsText))
-        let tonText = manager.fakeTonBalance.flatMap { val -> String in
+        let tonText = manager.fakeTonBalance(for: currentPeerId).flatMap { val -> String in
             if val.truncatingRemainder(dividingBy: 1) == 0 {
                 return "\(Int64(val))"
             } else {
@@ -575,41 +754,41 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
         entries.append(.tonBalanceInput("Баланс TON", tonText))
         entries.append(.premiumNotice("Визуально активирует статус Premium и заменяет баланс Звезд и TON во всех экранах приложения."))
         
-        // 2. Секция: Данные профиля (Номер, Канал, Бизнес)
-        entries.append(.profileDataHeader("ДАННЫЕ ПРОФИЛЯ (НОМЕР, ЮЗЕРНЕЙМ, БИЗНЕС)"))
-        entries.append(.fakeMainUsernameInput("Основной юзернейм", manager.fakeMainUsername ?? ""))
-        entries.append(.fakePhoneToggle(manager.isFakePhoneEnabled))
-        entries.append(.fakePhoneInput("Номер телефона", manager.fakePhone))
-        let phonePriceVal = manager.fakePhonePriceTon
+        // 2. Секция: Данные профиля (Номер, Юзернейм, Fragment)
+        entries.append(.profileDataHeader("ДАННЫЕ ПРОФИЛЯ (НОМЕР, ЮЗЕРНЕЙМ, FRAGMENT)"))
+        entries.append(.fakeMainUsernameInput("Основной юзернейм", manager.fakeMainUsername(for: currentPeerId) ?? ""))
+        entries.append(.fakePhoneToggle(manager.isFakePhoneEnabled(for: currentPeerId)))
+        entries.append(.fakePhoneInput("Номер телефона", manager.fakePhone(for: currentPeerId)))
+        let phonePriceVal = manager.fakePhonePriceTon(for: currentPeerId)
         let phonePriceText = (phonePriceVal.truncatingRemainder(dividingBy: 1) == 0) ? "\(Int64(phonePriceVal))" : "\(phonePriceVal)"
         entries.append(.fakePhonePriceInput("Цена номера (TON)", phonePriceText))
-        entries.append(.fakePurchaseDateInput("Дата покупки Fragment", manager.fakePurchaseDateString ?? ""))
-        entries.append(.fakeChannelTitleInput("Личный канал", manager.fakeChannelTitle))
-        entries.append(.fakeBusinessLocationInput("Адрес (геопозиция)", manager.fakeBusinessLocation))
-        entries.append(.fakeBusinessHoursInput("Часы работы", manager.fakeBusinessHours))
+        entries.append(.fakePurchaseDateInput("Дата покупки Fragment", manager.fakePurchaseDateString(for: currentPeerId) ?? ""))
         entries.append(.profileDataNotice("Подменённый номер и основной юзернейм отображаются в профиле и при редактировании. По нажатию открывается шторка Fragment с ценой и датой покупки."))
         
         // 3. Секция: NFT-юзернеймы
         entries.append(.nftUsernamesHeader("NFT-ЮЗЕРНЕЙМЫ"))
-        entries.append(.addUsernameAction("Добавить юз"))
-        for (index, u) in manager.fakeUsernames.enumerated() {
+        entries.append(.addUsernameAction("Добавить юзернейм"))
+        for (index, u) in manager.fakeUsernames(for: currentPeerId).enumerated() {
             entries.append(.nftUsernameItem(index: index, username: u.username, priceTon: u.priceTon))
         }
         entries.append(.nftUsernamesNotice("Юзернеймы отображаются в профиле как коллекционные с поддержкой шторки Fragment. Свайп влево для удаления."))
         
         // 4. Секция: Подарки в профиле
         entries.append(.giftsHeader("ПОДАРКИ В ПРОФИЛЕ"))
-        entries.append(.addGiftAction("Добавить подарок в профиль"))
-        for (index, gift) in manager.fakeGifts.enumerated() {
-            let title = "#\(gift.giftNumber) • \(gift.patternName)"
-            let subtitle = "\(gift.backdropColorHex)"
+        entries.append(.addNftGiftAction("Добавить NFT-подарок по ссылке"))
+        entries.append(.addUnupgradedGiftAction("Добавить обычный подарок по ссылке"))
+        entries.append(.openGiftStoreAction("Каталог подарков Telegram"))
+        entries.append(.addCustomGiftAction("Конструктор кастомного подарка"))
+        for (index, gift) in manager.fakeGifts(for: currentPeerId).enumerated() {
+            let title = "#\(gift.giftNumber) • \(gift.title ?? gift.patternName)"
+            let subtitle = gift.isUpgraded ? "NFT (Улучшенный)" : "Обычный (Неулучшенный)"
             entries.append(.giftItem(index: index, id: gift.id, title: title, subtitle: subtitle))
         }
-        entries.append(.giftsNotice("Созданные подарки подмешиваются в начало вкладки подарков профиля с кнопками «Передать» и «Продать». Свайп влево для удаления."))
+        entries.append(.giftsNotice("Подарки отображаются во вкладке «Подарки» профиля с активными действиями (Передать, Носить, Закрепить, Продать / Улучшить). Свайп влево для удаления."))
         
         let controllerState = ItemListControllerState(
             presentationData: ItemListPresentationData(presentationData),
-            title: .text("Прочее"),
+            title: .text("Neogram"),
             leftNavigationButton: nil,
             rightNavigationButton: nil,
             backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)

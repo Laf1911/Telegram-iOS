@@ -1666,7 +1666,7 @@ func peerInfoScreenData(
                 if isMyProfile {
                     availablePanes?.insert(.stories, at: 0)
                     if availablePanes != nil, profileGiftsContext != nil, let cachedData = peerView.cachedData as? CachedUserData {
-                        let localCount = FakeProfileManager.shared.fakeGifts(for: peerView.peerId.toInt64()).count
+                        let localCount = FakeProfileManager.shared.fakeGifts(for: peerView.peerId.id._internalGetInt64Value()).count
                         let effectiveStarGiftsCount = max(cachedData.starGiftsCount ?? 0, Int32(localCount))
                         if effectiveStarGiftsCount > 0 {
                             availablePanes?.insert(.gifts, at: 1)
@@ -1681,7 +1681,7 @@ func peerInfoScreenData(
                     }
                     
                     if availablePanes != nil, profileGiftsContext != nil, let cachedData = peerView.cachedData as? CachedUserData, peerView.peerId != context.account.peerId {
-                        let localCount = FakeProfileManager.shared.fakeGifts(for: peerView.peerId.toInt64()).count
+                        let localCount = FakeProfileManager.shared.fakeGifts(for: peerView.peerId.id._internalGetInt64Value()).count
                         let effectiveStarGiftsCount = max(cachedData.starGiftsCount ?? 0, Int32(localCount))
                         if effectiveStarGiftsCount > 0 {
                             availablePanes?.insert(.gifts, at: hasStories ? 1 : 0)

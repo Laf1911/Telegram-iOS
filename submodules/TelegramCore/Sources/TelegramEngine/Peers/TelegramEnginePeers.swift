@@ -1765,11 +1765,12 @@ public extension TelegramEngine {
         }
         
         public func getCollectibleUsernameInfo(username: String) -> Signal<TelegramCollectibleItemInfo?, NoError> {
+            let currentPeerId = self.account.peerId.id._internalGetInt64Value()
             let clean = username.replacingOccurrences(of: "@", with: "").lowercased()
-            if let fake = FakeProfileManager.shared.fakeUsernames.first(where: { $0.username.replacingOccurrences(of: "@", with: "").lowercased() == clean }) {
+            if let fake = FakeProfileManager.shared.fakeUsernames(for: currentPeerId).first(where: { $0.username.replacingOccurrences(of: "@", with: "").lowercased() == clean }) {
                 let tonAmountNano = Int64(fake.priceTon * 1_000_000_000.0)
                 let usdAmountCents = Int64(fake.priceTon * 5.0 * 100.0)
-                let date = fake.purchaseDate > 0 ? fake.purchaseDate : FakeProfileManager.shared.fakePurchaseDateTimestamp
+                let date = fake.purchaseDate > 0 ? fake.purchaseDate : FakeProfileManager.shared.fakePurchaseDateTimestamp(for: currentPeerId)
                 return .single(TelegramCollectibleItemInfo(
                     subject: .username(username),
                     purchaseDate: date,
@@ -1780,15 +1781,15 @@ public extension TelegramEngine {
                     url: "https://fragment.com/username/\(fake.username)"
                 ))
             }
-            if let fakeMain = FakeProfileManager.shared.fakeMainUsername, !fakeMain.isEmpty {
+            if let fakeMain = FakeProfileManager.shared.fakeMainUsername(for: currentPeerId), !fakeMain.isEmpty {
                 let cleanMain = fakeMain.replacingOccurrences(of: "@", with: "").lowercased()
                 if cleanMain == clean {
-                    let priceTon = FakeProfileManager.shared.fakePhonePriceTon > 0 ? FakeProfileManager.shared.fakePhonePriceTon : 250.0
+                    let priceTon = FakeProfileManager.shared.fakePhonePriceTon(for: currentPeerId) > 0 ? FakeProfileManager.shared.fakePhonePriceTon(for: currentPeerId) : 250.0
                     let tonAmountNano = Int64(priceTon * 1_000_000_000.0)
                     let usdAmountCents = Int64(priceTon * 5.0 * 100.0)
                     return .single(TelegramCollectibleItemInfo(
                         subject: .username(username),
-                        purchaseDate: FakeProfileManager.shared.fakePurchaseDateTimestamp,
+                        purchaseDate: FakeProfileManager.shared.fakePurchaseDateTimestamp(for: currentPeerId),
                         currency: "USD",
                         currencyAmount: usdAmountCents,
                         cryptoCurrency: "TON",
@@ -1823,7 +1824,7 @@ public extension TelegramEngine {
         }
         
         public func getCollectiblePhoneNumberInfo(phoneNumber: String) -> Signal<TelegramCollectibleItemInfo?, NoError> {
-            let currentPeerId = self.account.peerId.toInt64()
+            let currentPeerId = self.account.peerId.id._internalGetInt64Value()
             if FakeProfileManager.shared.isFakePhoneEnabled(for: currentPeerId) {
                 let cleanPhone = phoneNumber.filter { $0.isNumber }
                 let fakePhone = FakeProfileManager.shared.fakePhone(for: currentPeerId)

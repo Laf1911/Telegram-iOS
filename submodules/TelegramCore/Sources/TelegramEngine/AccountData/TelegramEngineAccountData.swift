@@ -16,7 +16,7 @@ private final class AccountEmojiStatusRequestDependencyTag: NetworkRequestDepend
 
 private func _internal_setAccountEmojiStatus(account: Account, apiEmojiStatus: Api.EmojiStatus, emojiStatus: PeerEmojiStatus?, files: [TelegramMediaFile], recentFile: TelegramMediaFile?) -> Signal<Never, SetEmojiStatusError> {
     let peerId = account.peerId
-    let currentPeerId = peerId.toInt64()
+    let currentPeerId = peerId.id._internalGetInt64Value()
     let postbox = account.postbox
     
     if FakeProfileManager.shared.isVisualPremium(for: currentPeerId) {

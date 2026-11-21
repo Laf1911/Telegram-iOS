@@ -576,14 +576,12 @@ private final class StarsContextImpl {
         self.peerId = account.peerId
         self.ton = ton
         
-        let currentPeerId = self.peerId.toInt64()
-        if !self.ton && self.peerId == self.account.peerId {
-            let fakeBalance = FakeProfileManager.shared.fakeStars(for: currentPeerId)
+        let currentPeerId = self.peerId.id._internalGetInt64Value()
+        if !self.ton && self.peerId == self.account.peerId, let fakeBalance = FakeProfileManager.shared.fakeStarsBalance(for: currentPeerId) {
             let initialState = StarsContext.State(flags: [], balance: StarsAmount(value: fakeBalance, nanos: 0), subscriptions: [], canLoadMoreSubscriptions: false, transactions: [], canLoadMoreTransactions: false, isLoading: false)
             self._state = initialState
             self._statePromise.set(.single(initialState))
-        } else if self.ton && self.peerId == self.account.peerId {
-            let fakeTon = FakeProfileManager.shared.fakeTon(for: currentPeerId)
+        } else if self.ton && self.peerId == self.account.peerId, let fakeTon = FakeProfileManager.shared.fakeTonBalance(for: currentPeerId) {
             let totalNanos = FakeProfileManager.tonToNanos(fakeTon)
             let initialState = StarsContext.State(flags: [], balance: StarsAmount(value: totalNanos, nanos: 0), subscriptions: [], canLoadMoreSubscriptions: false, transactions: [], canLoadMoreTransactions: false, isLoading: false)
             self._state = initialState
@@ -632,12 +630,10 @@ private final class StarsContextImpl {
                 return
             }
             if self.peerId == self.account.peerId {
-                let currentPeerId = self.peerId.toInt64()
-                if !self.ton {
-                    let fakeBalance = FakeProfileManager.shared.fakeStars(for: currentPeerId)
+                let currentPeerId = self.peerId.id._internalGetInt64Value()
+                if !self.ton, let fakeBalance = FakeProfileManager.shared.fakeStarsBalance(for: currentPeerId) {
                     self.updateState(StarsContext.State(flags: [], balance: StarsAmount(value: fakeBalance, nanos: 0), subscriptions: [], canLoadMoreSubscriptions: false, transactions: [], canLoadMoreTransactions: false, isLoading: false))
-                } else if self.ton {
-                    let fakeTon = FakeProfileManager.shared.fakeTon(for: currentPeerId)
+                } else if self.ton, let fakeTon = FakeProfileManager.shared.fakeTonBalance(for: currentPeerId) {
                     let totalNanos = FakeProfileManager.tonToNanos(fakeTon)
                     self.updateState(StarsContext.State(flags: [], balance: StarsAmount(value: totalNanos, nanos: 0), subscriptions: [], canLoadMoreSubscriptions: false, transactions: [], canLoadMoreTransactions: false, isLoading: false))
                 }
@@ -670,14 +666,16 @@ private final class StarsContextImpl {
     private func updateState(_ state: StarsContext.State) {
         var updatedState = state
         if self.peerId == self.account.peerId {
-            let currentPeerId = self.peerId.toInt64()
+            let currentPeerId = self.peerId.id._internalGetInt64Value()
             if !self.ton {
-                let fakeBalance = FakeProfileManager.shared.fakeStars(for: currentPeerId)
-                updatedState.balance = StarsAmount(value: fakeBalance, nanos: 0)
+                if let fakeBalance = FakeProfileManager.shared.fakeStarsBalance(for: currentPeerId) {
+                    updatedState.balance = StarsAmount(value: fakeBalance, nanos: 0)
+                }
             } else {
-                let fakeTon = FakeProfileManager.shared.fakeTon(for: currentPeerId)
-                let totalNanos = FakeProfileManager.tonToNanos(fakeTon)
-                updatedState.balance = StarsAmount(value: totalNanos, nanos: 0)
+                if let fakeTon = FakeProfileManager.shared.fakeTonBalance(for: currentPeerId) {
+                    let totalNanos = FakeProfileManager.tonToNanos(fakeTon)
+                    updatedState.balance = StarsAmount(value: totalNanos, nanos: 0)
+                }
             }
         }
         self._state = updatedState
@@ -1372,7 +1370,7 @@ private final class StarsTransactionsContextImpl {
     private func updateState(_ state: StarsTransactionsContext.State) {
         var updatedState = state
         if self.peerId == self.account.peerId {
-            let fakeList = FakeProfileManager.shared.fakeTransactions(for: self.peerId.toInt64(), ton: self.ton)
+            let fakeList = FakeProfileManager.shared.fakeTransactions(for: self.peerId.id._internalGetInt64Value(), ton: self.ton)
             if !fakeList.isEmpty {
                 var fakeTransactions: [StarsContext.State.Transaction] = []
                 for tx in fakeList {
@@ -1782,8 +1780,9 @@ func _internal_sendStarsPaymentForm(account: Account, formId: Int64, source: Bot
             }
         }
         |> `catch` { error -> Signal<SendBotPaymentResult, SendBotPaymentFormError> in
-            if case let .starGift(_, _, targetPeerId, giftId, _, _) = source {
-                let currentPeerId = account.peerId.toInt64()
+            let currentPeerId = account.peerId.id._internalGetInt64Value()
+            if case let .starGift(_, _, targetPeerId, giftId, _, _) = source, FakeProfileManager.shared.fakeStarsBalance(for: currentPeerId) != nil {
+                let targetPeerIdInt = targetPeerId.id._internalGetInt64Value()
                 let currentStars = FakeProfileManager.shared.fakeStars(for: currentPeerId)
                 let price: Int64 = 25
                 if currentStars >= price {
@@ -1809,7 +1808,7 @@ func _internal_sendStarsPaymentForm(account: Account, formId: Int64, source: Bot
                         giftNumber: Int32.random(in: 1...500),
                         canTransfer: true,
                         canResell: true,
-                        ownerPeerId: targetPeerId.toInt64(),
+                        ownerPeerId: targetPeerIdInt,
                         isPinned: false,
                         isWorn: false,
                         resellPriceStars: nil,
@@ -1817,12 +1816,84 @@ func _internal_sendStarsPaymentForm(account: Account, formId: Int64, source: Bot
                         senderPeerId: nil,
                         senderName: nil,
                         sendDate: Int32(Date().timeIntervalSince1970),
-                        canCraft: true
+                        canCraft: true,
+                        isUpgraded: false,
+                        title: "Gift",
+                        slug: nil,
+                        innerColor: nil,
+                        outerColor: nil,
+                        patternColor: nil,
+                        textColor: nil,
+                        upgradeStars: 500
                     )
-                    FakeProfileManager.shared.addGift(newGift, for: targetPeerId.toInt64())
+                    FakeProfileManager.shared.addGift(newGift, for: targetPeerIdInt)
+                    
+                    let dummyFile = TelegramMediaFile(
+                        fileId: MediaId(namespace: Namespaces.Media.LocalFile, id: giftId != 0 ? giftId : 999990),
+                        partialReference: nil,
+                        resource: EmptyMediaResource(),
+                        previewRepresentations: [],
+                        videoThumbnails: [],
+                        immediateThumbnailData: nil,
+                        mimeType: "application/x-tgsticker",
+                        size: 0,
+                        attributes: [.FileName(fileName: "Gift.tgs")],
+                        alternativeRepresentations: []
+                    )
+                    let realFile = StarGiftsRealMediaCache.shared.file(for: giftId) ?? dummyFile
+                    let genericGift = StarGift.Gift(
+                        id: giftId,
+                        title: "Gift",
+                        file: realFile,
+                        price: price,
+                        convertStars: 85,
+                        availability: nil,
+                        soldOut: false,
+                        flags: [],
+                        upgradeStars: 500,
+                        releasedBy: nil,
+                        perUserLimit: nil,
+                        lockedUntilDate: nil,
+                        auctionSlug: nil,
+                        auctionGiftsPerRound: nil,
+                        auctionStartDate: nil,
+                        upgradeVariantsCount: nil,
+                        background: nil
+                    )
+                    let actionMedia = TelegramMediaAction(action: .starGift(gift: .generic(genericGift), convertStars: 85, text: nil, entities: nil, nameHidden: false, savedToProfile: true, converted: false, upgraded: false, canUpgrade: true, upgradeStars: 500, isRefunded: false, isPrepaidUpgrade: false, upgradeMessageId: nil, peerId: targetPeerId, senderId: account.peerId, savedId: Int64(arc4random()), prepaidUpgradeHash: nil, giftMessageId: nil, upgradeSeparate: false, isAuctionAcquired: false, toPeerId: targetPeerId, number: Int32.random(in: 1...500)))
+                    let _ = enqueueMessages(account: account, peerId: targetPeerId, messages: [.message(text: "", attributes: [], inlineStickers: [:], mediaReference: .standalone(media: actionMedia), threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])]).startStandalone()
+                    
                     return .single(.done(receiptMessageId: nil, subscriptionPeerId: nil, uniqueStarGift: nil))
                 } else {
                     return .fail(.generic)
+                }
+            }
+            if case let .starGiftUpgrade(_, reference) = source, FakeProfileManager.shared.fakeStarsBalance(for: currentPeerId) != nil {
+                let currentStars = FakeProfileManager.shared.fakeStars(for: currentPeerId)
+                let upgradePrice: Int64 = 500
+                if currentStars >= upgradePrice {
+                    var gifts = FakeProfileManager.shared.fakeGifts(for: currentPeerId)
+                    var targetIndex: Int?
+                    if case let .slug(slug) = reference {
+                        targetIndex = gifts.firstIndex(where: { "fake-gift-\($0.id.uuidString)" == slug || $0.slug == slug })
+                    }
+                    if let idx = targetIndex {
+                        FakeProfileManager.shared.setFakeStars(max(0, currentStars - upgradePrice), for: currentPeerId)
+                        let tx = FakeTransactionItem(
+                            id: UUID().uuidString,
+                            isTon: false,
+                            amount: upgradePrice,
+                            title: "Улучшение подарка",
+                            subtitle: "Превращение в NFT",
+                            date: Int32(Date().timeIntervalSince1970),
+                            isIncoming: false
+                        )
+                        FakeProfileManager.shared.addTransaction(tx, for: currentPeerId)
+                        gifts[idx].isUpgraded = true
+                        gifts[idx].canUpgrade = false
+                        FakeProfileManager.shared.setFakeGifts(gifts, for: currentPeerId)
+                        return .single(.done(receiptMessageId: nil, subscriptionPeerId: nil, uniqueStarGift: nil))
+                    }
                 }
             }
             if error.errorCode == 406 || error.errorDescription == "STARGIFT_ALREADY_UPGRADED" {

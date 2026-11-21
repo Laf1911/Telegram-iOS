@@ -31,6 +31,15 @@ public struct FakeStarGiftItem: Codable, Equatable, Hashable, Sendable {
     public var senderName: String?
     public var sendDate: Int32
     public var canCraft: Bool
+    public var isUpgraded: Bool
+    public var canUpgrade: Bool
+    public var title: String?
+    public var slug: String?
+    public var innerColor: Int32?
+    public var outerColor: Int32?
+    public var patternColor: Int32?
+    public var textColor: Int32?
+    public var upgradeStars: Int64?
 
     public init(
         id: UUID = UUID(),
@@ -48,7 +57,16 @@ public struct FakeStarGiftItem: Codable, Equatable, Hashable, Sendable {
         senderPeerId: Int64? = nil,
         senderName: String? = nil,
         sendDate: Int32 = Int32(Date().timeIntervalSince1970 - 86400 * 3),
-        canCraft: Bool = true
+        canCraft: Bool = true,
+        isUpgraded: Bool = true,
+        canUpgrade: Bool? = nil,
+        title: String? = nil,
+        slug: String? = nil,
+        innerColor: Int32? = nil,
+        outerColor: Int32? = nil,
+        patternColor: Int32? = nil,
+        textColor: Int32? = nil,
+        upgradeStars: Int64? = nil
     ) {
         self.id = id
         self.baseGiftId = baseGiftId
@@ -66,6 +84,80 @@ public struct FakeStarGiftItem: Codable, Equatable, Hashable, Sendable {
         self.senderName = senderName
         self.sendDate = sendDate
         self.canCraft = canCraft
+        self.isUpgraded = isUpgraded
+        self.canUpgrade = canUpgrade ?? (!isUpgraded)
+        self.title = title
+        self.slug = slug
+        self.innerColor = innerColor
+        self.outerColor = outerColor
+        self.patternColor = patternColor
+        self.textColor = textColor
+        self.upgradeStars = upgradeStars
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, baseGiftId, backdropColorHex, patternName, giftNumber
+        case canTransfer, canResell, ownerPeerId, isPinned, isWorn
+        case resellPriceStars, resellPriceTon, senderPeerId, senderName, sendDate, canCraft
+        case isUpgraded, canUpgrade, title, slug, innerColor, outerColor, patternColor, textColor, upgradeStars
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(UUID.self, forKey: .id)
+        self.baseGiftId = try c.decode(Int64.self, forKey: .baseGiftId)
+        self.backdropColorHex = (try? c.decode(String.self, forKey: .backdropColorHex)) ?? "#D4AF37"
+        self.patternName = (try? c.decode(String.self, forKey: .patternName)) ?? "Star"
+        self.giftNumber = (try? c.decode(Int32.self, forKey: .giftNumber)) ?? 1
+        self.canTransfer = (try? c.decode(Bool.self, forKey: .canTransfer)) ?? true
+        self.canResell = (try? c.decode(Bool.self, forKey: .canResell)) ?? true
+        self.ownerPeerId = (try? c.decode(Int64.self, forKey: .ownerPeerId)) ?? 0
+        self.isPinned = (try? c.decode(Bool.self, forKey: .isPinned)) ?? false
+        self.isWorn = (try? c.decode(Bool.self, forKey: .isWorn)) ?? false
+        self.resellPriceStars = try? c.decodeIfPresent(Int64.self, forKey: .resellPriceStars)
+        self.resellPriceTon = try? c.decodeIfPresent(Double.self, forKey: .resellPriceTon)
+        self.senderPeerId = try? c.decodeIfPresent(Int64.self, forKey: .senderPeerId)
+        self.senderName = try? c.decodeIfPresent(String.self, forKey: .senderName)
+        self.sendDate = (try? c.decode(Int32.self, forKey: .sendDate)) ?? Int32(Date().timeIntervalSince1970 - 86400 * 3)
+        self.canCraft = (try? c.decode(Bool.self, forKey: .canCraft)) ?? true
+        self.isUpgraded = (try? c.decode(Bool.self, forKey: .isUpgraded)) ?? true
+        self.canUpgrade = (try? c.decode(Bool.self, forKey: .canUpgrade)) ?? (!self.isUpgraded)
+        self.title = try? c.decodeIfPresent(String.self, forKey: .title)
+        self.slug = try? c.decodeIfPresent(String.self, forKey: .slug)
+        self.innerColor = try? c.decodeIfPresent(Int32.self, forKey: .innerColor)
+        self.outerColor = try? c.decodeIfPresent(Int32.self, forKey: .outerColor)
+        self.patternColor = try? c.decodeIfPresent(Int32.self, forKey: .patternColor)
+        self.textColor = try? c.decodeIfPresent(Int32.self, forKey: .textColor)
+        self.upgradeStars = try? c.decodeIfPresent(Int64.self, forKey: .upgradeStars)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(self.id, forKey: .id)
+        try c.encode(self.baseGiftId, forKey: .baseGiftId)
+        try c.encode(self.backdropColorHex, forKey: .backdropColorHex)
+        try c.encode(self.patternName, forKey: .patternName)
+        try c.encode(self.giftNumber, forKey: .giftNumber)
+        try c.encode(self.canTransfer, forKey: .canTransfer)
+        try c.encode(self.canResell, forKey: .canResell)
+        try c.encode(self.ownerPeerId, forKey: .ownerPeerId)
+        try c.encode(self.isPinned, forKey: .isPinned)
+        try c.encode(self.isWorn, forKey: .isWorn)
+        try c.encode(self.canUpgrade, forKey: .canUpgrade)
+        try c.encodeIfPresent(self.resellPriceStars, forKey: .resellPriceStars)
+        try c.encodeIfPresent(self.resellPriceTon, forKey: .resellPriceTon)
+        try c.encodeIfPresent(self.senderPeerId, forKey: .senderPeerId)
+        try c.encodeIfPresent(self.senderName, forKey: .senderName)
+        try c.encode(self.sendDate, forKey: .sendDate)
+        try c.encode(self.canCraft, forKey: .canCraft)
+        try c.encode(self.isUpgraded, forKey: .isUpgraded)
+        try c.encodeIfPresent(self.title, forKey: .title)
+        try c.encodeIfPresent(self.slug, forKey: .slug)
+        try c.encodeIfPresent(self.innerColor, forKey: .innerColor)
+        try c.encodeIfPresent(self.outerColor, forKey: .outerColor)
+        try c.encodeIfPresent(self.patternColor, forKey: .patternColor)
+        try c.encodeIfPresent(self.textColor, forKey: .textColor)
+        try c.encodeIfPresent(self.upgradeStars, forKey: .upgradeStars)
     }
 }
 
@@ -228,6 +320,7 @@ public final class FakeProfileManager: @unchecked Sendable {
         let oldBalance = self.fakeStarsBalance(for: peerId) ?? 0
         let key = self.accountKey(Keys.fakeStarsBalance, peerId: peerId)
         if let val = value {
+            guard val >= 0 else { return }
             self.defaults.set(NSNumber(value: val), forKey: key)
             if val > oldBalance {
                 let diff = val - oldBalance
@@ -274,6 +367,7 @@ public final class FakeProfileManager: @unchecked Sendable {
         let oldTon = self.fakeTonBalance(for: peerId) ?? 0.0
         let key = self.accountKey(Keys.fakeTonBalance, peerId: peerId)
         if let val = value {
+            guard val >= 0 && val.isFinite && !val.isNaN else { return }
             self.defaults.set(val, forKey: key)
             if val > oldTon {
                 let diffTon = val - oldTon
@@ -799,6 +893,9 @@ public final class FakeProfileManager: @unchecked Sendable {
         self.lock.lock()
         defer { self.lock.unlock() }
         let sourcePeerId = senderPeerId ?? self.currentAccountPeerId ?? 0
+        guard sourcePeerId != 0, recipientPeerId != 0, sourcePeerId != recipientPeerId else {
+            return false
+        }
         var senderItems = self.fakeGifts(for: sourcePeerId)
         guard let index = senderItems.firstIndex(where: { $0.id == id }) else {
             return false

@@ -162,11 +162,11 @@ func infoItems(
                 }
                 interaction.openChat(peerId)
             }))
-        } else if isMyProfile && !FakeProfileManager.shared.fakeChannelTitle.isEmpty {
+        } else if isMyProfile && !FakeProfileManager.shared.fakeChannelTitle(for: context.account.peerId.id._internalGetInt64Value()).isEmpty {
             let fakeChannel = TelegramChannel(
                 id: EnginePeer.Id(namespace: Namespaces.Peer.CloudChannel, id: EnginePeer.Id.Id._internalFromInt64Value(999999999)),
                 accessHash: nil,
-                title: FakeProfileManager.shared.fakeChannelTitle,
+                title: FakeProfileManager.shared.fakeChannelTitle(for: context.account.peerId.id._internalGetInt64Value()),
                 username: nil,
                 photo: [],
                 creationDate: 0,
@@ -223,7 +223,7 @@ func infoItems(
         }
         
         var effectivePhone = user.phone
-        let currentPeerId = context.account.peerId.toInt64()
+        let currentPeerId = context.account.peerId.id._internalGetInt64Value()
         if isMyProfile && FakeProfileManager.shared.isFakePhoneEnabled(for: currentPeerId) {
             let fake = FakeProfileManager.shared.fakePhone(for: currentPeerId)
             if !fake.isEmpty {
@@ -482,11 +482,11 @@ func infoItems(
                 items[currentPeerInfoSection]!.append(PeerInfoScreenBusinessHoursItem(id: ItemBusinessHours, label: presentationData.strings.PeerInfo_BusinessHours_Label, businessHours: businessHours, requestLayout: { animated in
                     interaction.requestLayout(animated)
                 }, longTapAction: nil, contextAction: workingHoursContextAction))
-            } else if isMyProfile && !FakeProfileManager.shared.fakeBusinessHours.isEmpty {
+            } else if isMyProfile && !FakeProfileManager.shared.fakeBusinessHours(for: context.account.peerId.id._internalGetInt64Value()).isEmpty {
                 items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(
                     id: ItemBusinessHours,
                     label: presentationData.strings.PeerInfo_BusinessHours_Label,
-                    text: FakeProfileManager.shared.fakeBusinessHours,
+                    text: FakeProfileManager.shared.fakeBusinessHours(for: context.account.peerId.id._internalGetInt64Value()),
                     textColor: .primary,
                     action: nil,
                     requestLayout: { animated in
@@ -496,8 +496,8 @@ func infoItems(
             }
             
             var effectiveBusinessLocation = cachedData.businessLocation
-            if effectiveBusinessLocation == nil && isMyProfile && !FakeProfileManager.shared.fakeBusinessLocation.isEmpty {
-                effectiveBusinessLocation = TelegramBusinessLocation(address: FakeProfileManager.shared.fakeBusinessLocation, coordinates: nil)
+            if effectiveBusinessLocation == nil && isMyProfile && !FakeProfileManager.shared.fakeBusinessLocation(for: context.account.peerId.id._internalGetInt64Value()).isEmpty {
+                effectiveBusinessLocation = TelegramBusinessLocation(address: FakeProfileManager.shared.fakeBusinessLocation(for: context.account.peerId.id._internalGetInt64Value()), coordinates: nil)
             }
             if let businessLocation = effectiveBusinessLocation {
                 if let coordinates = businessLocation.coordinates {
@@ -526,6 +526,9 @@ func infoItems(
         }
         
         if !isMyProfile {
+            items[currentPeerInfoSection]!.append(PeerInfoScreenActionItem(id: 6005, text: "Отправить подарок", color: .accent, icon: generateTintedImage(image: UIImage(bundleImageName: "Peer Info/Gifts/AddGift"), color: presentationData.theme.list.itemAccentColor), action: {
+                interaction.openPremiumGift()
+            }))
             if !data.isContact, user.botInfo == nil {
                 items[currentPeerInfoSection]!.append(PeerInfoScreenActionItem(id: ItemAddToContacts, text: presentationData.strings.PeerInfo_AddToContacts, action: {
                     interaction.openAddContact()

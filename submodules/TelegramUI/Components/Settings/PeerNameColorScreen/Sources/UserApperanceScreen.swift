@@ -1417,7 +1417,7 @@ final class UserAppearanceScreenComponent: Component {
                                     guard let self, let resolvedState = self.resolveState(), let component = self.component else {
                                         return
                                     }
-                                    let currentPeerId = component.context.account.peerId.toInt64()
+                                    let currentPeerId = component.context.account.peerId.id._internalGetInt64Value()
                                     FakeProfileManager.shared.resetProfileColor(for: currentPeerId)
                                     let _ = component.context.account.postbox.transaction { transaction in
                                         if let user = transaction.getPeer(component.context.account.peerId) as? TelegramUser {
