@@ -1081,8 +1081,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 
                 // MARK: Swiftgram
                 icons = [
-                    PresentationAppIcon(name: "SGDefault", imageName: "SGDefault", isDefault: true),
-                    PresentationAppIcon(name: "SGBlack", imageName: "SGBlack"),
+                    PresentationAppIcon(name: "SGBlack", imageName: "SGBlack", isDefault: true),
+                    PresentationAppIcon(name: "SGDefault", imageName: "SGDefault"),
                     PresentationAppIcon(name: "SGLegacy", imageName: "SGLegacy"),
                     PresentationAppIcon(name: "SGInverted", imageName: "SGInverted"),
                     PresentationAppIcon(name: "SGWhite", imageName: "SGWhite"),
@@ -1411,6 +1411,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             |> deliverOnMainQueue
             |> map { accountAndSettings -> AuthorizedApplicationContext? in
                 return accountAndSettings.flatMap { context, callListSettings in
+                    FakeProfileManager.shared.currentAccountPeerId = context.account.peerId.id._internalGetInt64Value()
                     return AuthorizedApplicationContext(sharedApplicationContext: sharedApplicationContext, mainWindow: self.mainWindow, context: context as! AccountContextImpl, accountManager: sharedApplicationContext.sharedContext.accountManager, showContactsTab: callListSettings.showContactsTab, /* MARK: Swiftgram */ showCallsTab: callListSettings.showTab, reinitializedNotificationSettings: {
                         let _ = (self.context.get()
                         |> take(1)

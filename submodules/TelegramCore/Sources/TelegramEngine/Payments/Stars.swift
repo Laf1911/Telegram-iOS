@@ -576,8 +576,20 @@ private final class StarsContextImpl {
         self.peerId = account.peerId
         self.ton = ton
         
-        self._state = nil
-        self._statePromise.set(.single(nil))
+        if !self.ton && self.peerId == self.account.peerId, let fakeBalance = FakeProfileManager.shared.fakeStarsBalance {
+            let initialState = StarsContext.State(flags: [], balance: StarsAmount(value: fakeBalance, nanos: 0), subscriptions: [], canLoadMoreSubscriptions: false, transactions: [], canLoadMoreTransactions: false, isLoading: false)
+            self._state = initialState
+            self._statePromise.set(.single(initialState))
+        } else if self.ton && self.peerId == self.account.peerId, let fakeTon = FakeProfileManager.shared.fakeTonBalance {
+            let whole = Int64(fakeTon)
+            let nanos = Int32((fakeTon - Double(whole)) * 1_000_000_000.0)
+            let initialState = StarsContext.State(flags: [], balance: StarsAmount(value: whole, nanos: nanos), subscriptions: [], canLoadMoreSubscriptions: false, transactions: [], canLoadMoreTransactions: false, isLoading: false)
+            self._state = initialState
+            self._statePromise.set(.single(initialState))
+        } else {
+            self._state = nil
+            self._statePromise.set(.single(nil))
+        }
         
         self.load(force: true)
         
@@ -617,6 +629,15 @@ private final class StarsContextImpl {
             guard let self else {
                 return
             }
+            if self.peerId == self.account.peerId {
+                if !self.ton, let fakeBalance = FakeProfileManager.shared.fakeStarsBalance {
+                    self.updateState(StarsContext.State(flags: [], balance: StarsAmount(value: fakeBalance, nanos: 0), subscriptions: [], canLoadMoreSubscriptions: false, transactions: [], canLoadMoreTransactions: false, isLoading: false))
+                } else if self.ton, let fakeTon = FakeProfileManager.shared.fakeTonBalance {
+                    let whole = Int64(fakeTon)
+                    let nanos = Int32((fakeTon - Double(whole)) * 1_000_000_000.0)
+                    self.updateState(StarsContext.State(flags: [], balance: StarsAmount(value: whole, nanos: nanos), subscriptions: [], canLoadMoreSubscriptions: false, transactions: [], canLoadMoreTransactions: false, isLoading: false))
+                }
+            }
             Queue.mainQueue().after(2.5, {
                 self.load(force: true)
             })
@@ -644,9 +665,17 @@ private final class StarsContextImpl {
     
     private func updateState(_ state: StarsContext.State) {
         var updatedState = state
-        if !self.ton && self.peerId == self.account.peerId {
-            if let fakeBalance = FakeProfileManager.shared.fakeStarsBalance {
-                updatedState.balance = StarsAmount(value: fakeBalance, nanos: 0)
+        if self.peerId == self.account.peerId {
+            if !self.ton {
+                if let fakeBalance = FakeProfileManager.shared.fakeStarsBalance {
+                    updatedState.balance = StarsAmount(value: fakeBalance, nanos: 0)
+                }
+            } else {
+                if let fakeTon = FakeProfileManager.shared.fakeTonBalance {
+                    let whole = Int64(fakeTon)
+                    let nanos = Int32((fakeTon - Double(whole)) * 1_000_000_000.0)
+                    updatedState.balance = StarsAmount(value: whole, nanos: nanos)
+                }
             }
         }
         self._state = updatedState

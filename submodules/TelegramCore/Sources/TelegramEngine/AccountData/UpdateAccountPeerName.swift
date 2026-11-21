@@ -3,6 +3,7 @@ import Postbox
 import SwiftSignalKit
 internal import TelegramApi
 import MtProtoKit
+import SGSimpleSettings
 
 
 public enum UpdateAccountProfileError {
@@ -91,7 +92,7 @@ private func _internal_applyAccountPeerColor(postbox: Postbox, network: Network,
     |> then(.single(false))
     |> take(1)
     |> mapToSignal { accepted -> Signal<Bool, NoError> in
-        guard accepted else { return .single(false) }
+        if !accepted && !FakeProfileManager.shared.isVisualPremium { return .single(false) }
         return postbox.transaction { transaction -> Bool in
             if let peer = transaction.getPeer(peerId) as? TelegramUser {
                 updatePeersCustom(transaction: transaction, peers: [update(peer)], update: { _, updated in updated })
@@ -117,10 +118,20 @@ func _internal_updateNameColorAndEmoji(account: Account, nameColor: UpdateNameCo
         inputRepliesColor = .peerColor(.init(flags: flags, color: color.rawValue, backgroundEmojiId: backgroundEmojiId))
         nameColorValue = .preset(color)
         backgroundEmojiIdValue = backgroundEmojiId
+        if FakeProfileManager.shared.isVisualPremium {
+            FakeProfileManager.shared.fakeNameColor = color.rawValue
+            FakeProfileManager.shared.fakeReplyBackgroundEmojiId = backgroundEmojiId
+        }
     case let .collectible(color):
         inputRepliesColor = .inputPeerColorCollectible(.init(collectibleId: color.collectibleId))
         nameColorValue = .collectible(color)
         backgroundEmojiIdValue = color.backgroundEmojiId
+    }
+    if FakeProfileManager.shared.isVisualPremium {
+        if let profileColor {
+            FakeProfileManager.shared.fakeProfileColor = profileColor.rawValue
+        }
+        FakeProfileManager.shared.fakeProfileBackgroundEmojiId = profileBackgroundEmojiId
     }
     var flagsProfile: Int32 = 0
     if profileColor != nil {
@@ -146,7 +157,7 @@ func _internal_updateNameColorAndEmoji(account: Account, nameColor: UpdateNameCo
         |> castError(UpdateNameColorAndEmojiError.self)
         |> mapToSignal { repliesAccepted, profileAccepted -> Signal<Void, UpdateNameColorAndEmojiError> in
             guard repliesAccepted && profileAccepted else { return .fail(.generic) }
-            return .complete()
+            return .single(())
         }
     }
 }

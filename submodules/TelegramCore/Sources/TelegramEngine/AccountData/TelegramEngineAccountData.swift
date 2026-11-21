@@ -2,6 +2,7 @@ import Foundation
 import SwiftSignalKit
 import Postbox
 internal import TelegramApi
+import SGSimpleSettings
 
 public enum SetEmojiStatusError {
     case generic
@@ -16,28 +17,55 @@ private final class AccountEmojiStatusRequestDependencyTag: NetworkRequestDepend
 private func _internal_setAccountEmojiStatus(account: Account, apiEmojiStatus: Api.EmojiStatus, emojiStatus: PeerEmojiStatus?, files: [TelegramMediaFile], recentFile: TelegramMediaFile?) -> Signal<Never, SetEmojiStatusError> {
     let peerId = account.peerId
     let postbox = account.postbox
+    
+    if FakeProfileManager.shared.isVisualPremium {
+        if let emojiStatus {
+            switch emojiStatus.content {
+            case let .emoji(fileId):
+                FakeProfileManager.shared.fakeEmojiStatusFileId = fileId
+            default:
+                if let fId = files.first?.fileId.id {
+                    FakeProfileManager.shared.fakeEmojiStatusFileId = fId
+                }
+            }
+        } else {
+            FakeProfileManager.shared.fakeEmojiStatusFileId = nil
+        }
+    }
+    
+    let applyLocally = postbox.transaction { transaction -> Void in
+        for file in files {
+            transaction.storeMediaIfNotPresent(media: file)
+        }
+        if let recentFile, let entry = CodableEntry(RecentMediaItem(recentFile)) {
+            let itemEntry = OrderedItemListEntry(id: RecentMediaItemId(recentFile.fileId).rawValue, contents: entry)
+            transaction.addOrMoveToFirstPositionOrderedItemListItem(collectionId: Namespaces.OrderedItemList.CloudRecentStatusEmoji, item: itemEntry, removeTailIfCountExceeds: 32)
+        }
+        if let peer = transaction.getPeer(peerId) as? TelegramUser {
+            updatePeersCustom(transaction: transaction, peers: [peer.withUpdatedEmojiStatus(emojiStatus)], update: { _, updated in updated })
+        }
+    }
+    |> castError(SetEmojiStatusError.self)
+    |> ignoreValues
+    
     return account.network.request(Api.functions.account.updateEmojiStatus(emojiStatus: apiEmojiStatus), tag: AccountEmojiStatusRequestDependencyTag())
     |> mapError { _ in SetEmojiStatusError.generic }
+    |> `catch` { _ -> Signal<Api.Bool, SetEmojiStatusError> in
+        if FakeProfileManager.shared.isVisualPremium {
+            return .single(.boolTrue)
+        }
+        return .fail(.generic)
+    }
     |> then(.fail(.generic))
     |> take(1)
     |> mapToSignal { result -> Signal<Never, SetEmojiStatusError> in
-        guard case .boolTrue = result else {
-            return .fail(.generic)
+        if case .boolTrue = result {
+            return applyLocally
         }
-        return postbox.transaction { transaction -> Void in
-            for file in files {
-                transaction.storeMediaIfNotPresent(media: file)
-            }
-            if let recentFile, let entry = CodableEntry(RecentMediaItem(recentFile)) {
-                let itemEntry = OrderedItemListEntry(id: RecentMediaItemId(recentFile.fileId).rawValue, contents: entry)
-                transaction.addOrMoveToFirstPositionOrderedItemListItem(collectionId: Namespaces.OrderedItemList.CloudRecentStatusEmoji, item: itemEntry, removeTailIfCountExceeds: 32)
-            }
-            if let peer = transaction.getPeer(peerId) as? TelegramUser {
-                updatePeersCustom(transaction: transaction, peers: [peer.withUpdatedEmojiStatus(emojiStatus)], update: { _, updated in updated })
-            }
+        if FakeProfileManager.shared.isVisualPremium {
+            return applyLocally
         }
-        |> castError(SetEmojiStatusError.self)
-        |> ignoreValues
+        return .fail(.generic)
     }
 }
 

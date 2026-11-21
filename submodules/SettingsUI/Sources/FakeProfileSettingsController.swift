@@ -14,9 +14,12 @@ private final class FakeProfileSettingsArguments {
     let context: AccountContext
     let updateVisualPremium: (Bool) -> Void
     let updateStarsBalance: (Int64?) -> Void
+    let updateTonBalance: (Double?) -> Void
+    let updateMainUsername: (String?) -> Void
     let updateFakePhoneEnabled: (Bool) -> Void
     let updateFakePhone: (String) -> Void
     let updateFakePhonePriceTon: (Double) -> Void
+    let updatePurchaseDate: (String?) -> Void
     let updateChannelTitle: (String) -> Void
     let updateBusinessLocation: (String) -> Void
     let updateBusinessHours: (String) -> Void
@@ -29,9 +32,12 @@ private final class FakeProfileSettingsArguments {
         context: AccountContext,
         updateVisualPremium: @escaping (Bool) -> Void,
         updateStarsBalance: @escaping (Int64?) -> Void,
+        updateTonBalance: @escaping (Double?) -> Void,
+        updateMainUsername: @escaping (String?) -> Void,
         updateFakePhoneEnabled: @escaping (Bool) -> Void,
         updateFakePhone: @escaping (String) -> Void,
         updateFakePhonePriceTon: @escaping (Double) -> Void,
+        updatePurchaseDate: @escaping (String?) -> Void,
         updateChannelTitle: @escaping (String) -> Void,
         updateBusinessLocation: @escaping (String) -> Void,
         updateBusinessHours: @escaping (String) -> Void,
@@ -43,9 +49,12 @@ private final class FakeProfileSettingsArguments {
         self.context = context
         self.updateVisualPremium = updateVisualPremium
         self.updateStarsBalance = updateStarsBalance
+        self.updateTonBalance = updateTonBalance
+        self.updateMainUsername = updateMainUsername
         self.updateFakePhoneEnabled = updateFakePhoneEnabled
         self.updateFakePhone = updateFakePhone
         self.updateFakePhonePriceTon = updateFakePhonePriceTon
+        self.updatePurchaseDate = updatePurchaseDate
         self.updateChannelTitle = updateChannelTitle
         self.updateBusinessLocation = updateBusinessLocation
         self.updateBusinessHours = updateBusinessHours
@@ -68,13 +77,16 @@ private enum FakeProfileEntry: ItemListNodeEntry {
     case premiumHeader(String)
     case visualPremiumToggle(Bool)
     case starsBalanceInput(String, String)
+    case tonBalanceInput(String, String)
     case premiumNotice(String)
     
     // 2. Секция: Данные профиля (Номер, Канал, Бизнес)
     case profileDataHeader(String)
+    case fakeMainUsernameInput(String, String)
     case fakePhoneToggle(Bool)
     case fakePhoneInput(String, String)
     case fakePhonePriceInput(String, String)
+    case fakePurchaseDateInput(String, String)
     case fakeChannelTitleInput(String, String)
     case fakeBusinessLocationInput(String, String)
     case fakeBusinessHoursInput(String, String)
@@ -94,9 +106,9 @@ private enum FakeProfileEntry: ItemListNodeEntry {
     
     var section: ItemListSectionId {
         switch self {
-        case .premiumHeader, .visualPremiumToggle, .starsBalanceInput, .premiumNotice:
+        case .premiumHeader, .visualPremiumToggle, .starsBalanceInput, .tonBalanceInput, .premiumNotice:
             return FakeProfileSection.premiumAndStars.rawValue
-        case .profileDataHeader, .fakePhoneToggle, .fakePhoneInput, .fakePhonePriceInput, .fakeChannelTitleInput, .fakeBusinessLocationInput, .fakeBusinessHoursInput, .profileDataNotice:
+        case .profileDataHeader, .fakeMainUsernameInput, .fakePhoneToggle, .fakePhoneInput, .fakePhonePriceInput, .fakePurchaseDateInput, .fakeChannelTitleInput, .fakeBusinessLocationInput, .fakeBusinessHoursInput, .profileDataNotice:
             return FakeProfileSection.profileData.rawValue
         case .nftUsernamesHeader, .addUsernameAction, .nftUsernameItem, .nftUsernamesNotice:
             return FakeProfileSection.nftUsernames.rawValue
@@ -113,25 +125,31 @@ private enum FakeProfileEntry: ItemListNodeEntry {
             return 1001
         case .starsBalanceInput:
             return 1002
-        case .premiumNotice:
+        case .tonBalanceInput:
             return 1003
+        case .premiumNotice:
+            return 1004
             
         case .profileDataHeader:
             return 2000
-        case .fakePhoneToggle:
+        case .fakeMainUsernameInput:
             return 2001
-        case .fakePhoneInput:
+        case .fakePhoneToggle:
             return 2002
-        case .fakePhonePriceInput:
+        case .fakePhoneInput:
             return 2003
-        case .fakeChannelTitleInput:
+        case .fakePhonePriceInput:
             return 2004
-        case .fakeBusinessLocationInput:
+        case .fakePurchaseDateInput:
             return 2005
-        case .fakeBusinessHoursInput:
+        case .fakeChannelTitleInput:
             return 2006
-        case .profileDataNotice:
+        case .fakeBusinessLocationInput:
             return 2007
+        case .fakeBusinessHoursInput:
+            return 2008
+        case .profileDataNotice:
+            return 2009
             
         case .nftUsernamesHeader:
             return 3000
@@ -161,16 +179,22 @@ private enum FakeProfileEntry: ItemListNodeEntry {
             return v1 == v2
         case let (.starsBalanceInput(t1, v1), .starsBalanceInput(t2, v2)):
             return t1 == t2 && v1 == v2
+        case let (.tonBalanceInput(t1, v1), .tonBalanceInput(t2, v2)):
+            return t1 == t2 && v1 == v2
         case let (.premiumNotice(t1), .premiumNotice(t2)):
             return t1 == t2
             
         case let (.profileDataHeader(t1), .profileDataHeader(t2)):
             return t1 == t2
+        case let (.fakeMainUsernameInput(t1, v1), .fakeMainUsernameInput(t2, v2)):
+            return t1 == t2 && v1 == v2
         case let (.fakePhoneToggle(v1), .fakePhoneToggle(v2)):
             return v1 == v2
         case let (.fakePhoneInput(t1, v1), .fakePhoneInput(t2, v2)):
             return t1 == t2 && v1 == v2
         case let (.fakePhonePriceInput(t1, v1), .fakePhonePriceInput(t2, v2)):
+            return t1 == t2 && v1 == v2
+        case let (.fakePurchaseDateInput(t1, v1), .fakePurchaseDateInput(t2, v2)):
             return t1 == t2 && v1 == v2
         case let (.fakeChannelTitleInput(t1, v1), .fakeChannelTitleInput(t2, v2)):
             return t1 == t2 && v1 == v2
@@ -238,12 +262,40 @@ private enum FakeProfileEntry: ItemListNodeEntry {
                 },
                 action: {}
             )
+        case let .tonBalanceInput(title, value):
+            return ItemListSingleLineInputItem(
+                presentationData: presentationData,
+                title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor),
+                text: value,
+                placeholder: "Например, 150.5",
+                type: .regular(capitalization: false, autocorrection: false),
+                sectionId: self.section,
+                textUpdated: { text in
+                    let clean = text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")
+                    args.updateTonBalance(clean.isEmpty ? nil : Double(clean))
+                },
+                action: {}
+            )
         case let .premiumNotice(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section, style: .blocks)
             
         // 2. Секция: Данные профиля
         case let .profileDataHeader(text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
+        case let .fakeMainUsernameInput(title, value):
+            return ItemListSingleLineInputItem(
+                presentationData: presentationData,
+                title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor),
+                text: value,
+                placeholder: "Например, crow",
+                type: .regular(capitalization: false, autocorrection: false),
+                sectionId: self.section,
+                textUpdated: { text in
+                    let clean = text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "@", with: "")
+                    args.updateMainUsername(clean.isEmpty ? nil : clean)
+                },
+                action: {}
+            )
         case let .fakePhoneToggle(value):
             return ItemListSwitchItem(
                 presentationData: presentationData,
@@ -279,6 +331,20 @@ private enum FakeProfileEntry: ItemListNodeEntry {
                 textUpdated: { text in
                     let clean = text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")
                     args.updateFakePhonePriceTon(Double(clean) ?? 150.0)
+                },
+                action: {}
+            )
+        case let .fakePurchaseDateInput(title, value):
+            return ItemListSingleLineInputItem(
+                presentationData: presentationData,
+                title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor),
+                text: value,
+                placeholder: "Например, 15.05.2024",
+                type: .regular(capitalization: false, autocorrection: false),
+                sectionId: self.section,
+                textUpdated: { text in
+                    let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    args.updatePurchaseDate(clean.isEmpty ? nil : clean)
                 },
                 action: {}
             )
@@ -413,6 +479,14 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
             FakeProfileManager.shared.fakeStarsBalance = balance
             updateState()
         },
+        updateTonBalance: { balance in
+            FakeProfileManager.shared.fakeTonBalance = balance
+            updateState()
+        },
+        updateMainUsername: { username in
+            FakeProfileManager.shared.fakeMainUsername = username
+            updateState()
+        },
         updateFakePhoneEnabled: { value in
             FakeProfileManager.shared.isFakePhoneEnabled = value
             updateState()
@@ -423,6 +497,10 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
         },
         updateFakePhonePriceTon: { price in
             FakeProfileManager.shared.fakePhonePriceTon = price
+            updateState()
+        },
+        updatePurchaseDate: { date in
+            FakeProfileManager.shared.fakePurchaseDateString = date
             updateState()
         },
         updateChannelTitle: { title in
@@ -460,7 +538,7 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
                 let price = Double(rawPrice) ?? 0.0
                 guard !rawUsername.isEmpty else { return }
                 
-                let item = FakeNftUsername(username: rawUsername, priceTon: price, purchaseDate: Int32(Date().timeIntervalSince1970 - 86400 * 30))
+                let item = FakeNftUsername(username: rawUsername, priceTon: price, purchaseDate: FakeProfileManager.shared.fakePurchaseDateTimestamp)
                 FakeProfileManager.shared.addUsername(item)
                 updateState()
             }))
@@ -492,21 +570,25 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
         let manager = FakeProfileManager.shared
         
         // 1. Секция: Telegram Premium и Звезды
-        entries.append(.premiumHeader("TELEGRAM PREMIUM И ЗВЕЗДЫ"))
+        entries.append(.premiumHeader("TELEGRAM PREMIUM, ЗВЕЗДЫ И TON"))
         entries.append(.visualPremiumToggle(manager.isVisualPremium))
         let starsText = manager.fakeStarsBalance.flatMap { "\($0)" } ?? ""
         entries.append(.starsBalanceInput("Баланс Звезд", starsText))
-        entries.append(.premiumNotice("Визуально активирует статус Premium и заменяет баланс Звезд во всех экранах приложения."))
+        let tonText = manager.fakeTonBalance.flatMap { String(format: "%.1f", $0) } ?? ""
+        entries.append(.tonBalanceInput("Баланс TON", tonText))
+        entries.append(.premiumNotice("Визуально активирует статус Premium и заменяет баланс Звезд и TON во всех экранах приложения."))
         
         // 2. Секция: Данные профиля (Номер, Канал, Бизнес)
-        entries.append(.profileDataHeader("ДАННЫЕ ПРОФИЛЯ (НОМЕР, КАНАЛ, БИЗНЕС)"))
+        entries.append(.profileDataHeader("ДАННЫЕ ПРОФИЛЯ (НОМЕР, ЮЗЕРНЕЙМ, БИЗНЕС)"))
+        entries.append(.fakeMainUsernameInput("Основной юзернейм", manager.fakeMainUsername ?? ""))
         entries.append(.fakePhoneToggle(manager.isFakePhoneEnabled))
         entries.append(.fakePhoneInput("Номер телефона", manager.fakePhone))
         entries.append(.fakePhonePriceInput("Цена номера (TON)", String(format: "%.1f", manager.fakePhonePriceTon)))
+        entries.append(.fakePurchaseDateInput("Дата покупки Fragment", manager.fakePurchaseDateString ?? ""))
         entries.append(.fakeChannelTitleInput("Личный канал", manager.fakeChannelTitle))
         entries.append(.fakeBusinessLocationInput("Адрес (геопозиция)", manager.fakeBusinessLocation))
         entries.append(.fakeBusinessHoursInput("Часы работы", manager.fakeBusinessHours))
-        entries.append(.profileDataNotice("При нажатии на номер +888 в профиле откроется официальная шторка Fragment с указанной ценой покупки."))
+        entries.append(.profileDataNotice("Подменённый номер и основной юзернейм отображаются в профиле и при редактировании. По нажатию открывается шторка Fragment с ценой и датой покупки."))
         
         // 3. Секция: NFT-юзернеймы
         entries.append(.nftUsernamesHeader("NFT-ЮЗЕРНЕЙМЫ"))
@@ -528,7 +610,7 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
         
         let controllerState = ItemListControllerState(
             presentationData: ItemListPresentationData(presentationData),
-            title: .text("Профиль"),
+            title: .text("Прочее"),
             leftNavigationButton: nil,
             rightNavigationButton: nil,
             backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)

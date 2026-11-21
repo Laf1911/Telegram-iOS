@@ -229,7 +229,7 @@ func infoItems(
         if let phone = effectivePhone, !(SGSimpleSettings.shared.hidePhoneInSettings && isMyProfile) {
             let formattedPhone = formatPhoneNumber(context: context, number: phone)
             let label: String
-            if formattedPhone.hasPrefix("+888 ") || phone.hasPrefix("888") || phone.hasPrefix("+888") {
+            if formattedPhone.hasPrefix("+888 ") || phone.hasPrefix("888") || phone.hasPrefix("+888") || (isMyProfile && FakeProfileManager.shared.isFakePhoneEnabled) {
                 label = presentationData.strings.UserInfo_AnonymousNumberLabel
             } else {
                 label = presentationData.strings.ContactInfo_PhoneLabelMobile
@@ -250,7 +250,14 @@ func infoItems(
                 }
             }
         }
-        let effectiveMainUsername = user.addressName ?? (isMyProfile ? effectiveUsernames.first?.username : nil)
+        var effectiveMainUsername = user.addressName ?? (isMyProfile ? effectiveUsernames.first?.username : nil)
+        if isMyProfile, let fakeMain = FakeProfileManager.shared.fakeMainUsername, !fakeMain.isEmpty {
+            let clean = fakeMain.replacingOccurrences(of: "@", with: "")
+            effectiveMainUsername = clean
+            if !effectiveUsernames.contains(where: { $0.username.lowercased() == clean.lowercased() }) {
+                effectiveUsernames.insert(TelegramPeerUsername(flags: .isActive, username: clean), at: 0)
+            }
+        }
         if let mainUsername = effectiveMainUsername {
             var additionalUsernames: String?
             let usernames = effectiveUsernames.filter { $0.isActive && $0.username != mainUsername }

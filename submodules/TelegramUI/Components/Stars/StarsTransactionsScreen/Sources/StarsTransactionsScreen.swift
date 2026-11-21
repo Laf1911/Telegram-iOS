@@ -23,6 +23,7 @@ import TelegramStringFormatting
 import ListItemComponentAdaptor
 import ItemListUI
 import StarsWithdrawalScreen
+import SGSimpleSettings
 import PremiumDiamondComponent
 import StatisticsUI
 import EdgeEffect
@@ -608,9 +609,21 @@ final class StarsTransactionsScreenComponent: Component {
             
             let formattedBalance: String
             if component.starsContext.ton {
-                formattedBalance = formatTonAmountText(self.starsState?.balance.value ?? 0, dateTimeFormat: environment.dateTimeFormat)
+                let val: Int64
+                if let fakeTon = FakeProfileManager.shared.fakeTonBalance {
+                    val = Int64(fakeTon * 1_000_000_000.0)
+                } else {
+                    val = self.starsState?.balance.value ?? 0
+                }
+                formattedBalance = formatTonAmountText(val, dateTimeFormat: environment.dateTimeFormat)
             } else {
-                formattedBalance = formatStarsAmountText(self.starsState?.balance ?? StarsAmount.zero, dateTimeFormat: environment.dateTimeFormat)
+                let amt: StarsAmount
+                if let fakeStars = FakeProfileManager.shared.fakeStarsBalance {
+                    amt = StarsAmount(value: fakeStars, nanos: 0)
+                } else {
+                    amt = self.starsState?.balance ?? StarsAmount.zero
+                }
+                formattedBalance = formatStarsAmountText(amt, dateTimeFormat: environment.dateTimeFormat)
             }
             let smallLabelFont = Font.regular(11.0)
             let labelFont = Font.semibold(14.0)

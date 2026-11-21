@@ -54,9 +54,17 @@ public final class FakeProfileManager {
     private enum Keys {
         static let isVisualPremium = "FakeProfile_isVisualPremium"
         static let fakeStarsBalance = "FakeProfile_fakeStarsBalance"
+        static let fakeTonBalance = "FakeProfile_fakeTonBalance"
         static let isFakePhoneEnabled = "FakeProfile_isFakePhoneEnabled"
         static let fakePhone = "FakeProfile_fakePhone"
         static let fakePhonePriceTon = "FakeProfile_fakePhonePriceTon"
+        static let fakeMainUsername = "FakeProfile_fakeMainUsername"
+        static let fakePurchaseDateString = "FakeProfile_fakePurchaseDateString"
+        static let fakeEmojiStatusFileId = "FakeProfile_fakeEmojiStatusFileId"
+        static let fakeNameColor = "FakeProfile_fakeNameColor"
+        static let fakeProfileColor = "FakeProfile_fakeProfileColor"
+        static let fakeReplyBackgroundEmojiId = "FakeProfile_fakeReplyBackgroundEmojiId"
+        static let fakeProfileBackgroundEmojiId = "FakeProfile_fakeProfileBackgroundEmojiId"
         static let fakeChannelTitle = "FakeProfile_fakeChannelTitle"
         static let fakeBusinessLocation = "FakeProfile_fakeBusinessLocation"
         static let fakeBusinessHours = "FakeProfile_fakeBusinessHours"
@@ -80,17 +88,17 @@ public final class FakeProfileManager {
         get {
             self.lock.lock()
             defer { self.lock.unlock() }
-            if self.defaults.object(forKey: Keys.currentAccountPeerId) == nil {
+            guard let obj = self.defaults.object(forKey: Keys.currentAccountPeerId) else {
                 return nil
             }
-            let val = Int64(self.defaults.integer(forKey: Keys.currentAccountPeerId))
+            let val = (obj as? NSNumber)?.int64Value ?? Int64(self.defaults.integer(forKey: Keys.currentAccountPeerId))
             return val != 0 ? val : nil
         }
         set {
             self.lock.lock()
             defer { self.lock.unlock() }
             if let val = newValue {
-                self.defaults.set(val, forKey: Keys.currentAccountPeerId)
+                self.defaults.set(NSNumber(value: val), forKey: Keys.currentAccountPeerId)
             } else {
                 self.defaults.removeObject(forKey: Keys.currentAccountPeerId)
             }
@@ -100,13 +108,11 @@ public final class FakeProfileManager {
     public func isCurrentAccountPeer(id: Int64) -> Bool {
         self.lock.lock()
         defer { self.lock.unlock() }
-        if self.defaults.object(forKey: Keys.currentAccountPeerId) != nil {
-            let current = Int64(self.defaults.integer(forKey: Keys.currentAccountPeerId))
-            if current != 0 {
-                return current == id
-            }
+        guard let obj = self.defaults.object(forKey: Keys.currentAccountPeerId) else {
+            return false
         }
-        return true
+        let current = (obj as? NSNumber)?.int64Value ?? Int64(self.defaults.integer(forKey: Keys.currentAccountPeerId))
+        return current != 0 && current == id
     }
     
     // 1. Telegram Premium и Звезды
@@ -127,18 +133,200 @@ public final class FakeProfileManager {
         get {
             self.lock.lock()
             defer { self.lock.unlock() }
-            if self.defaults.object(forKey: Keys.fakeStarsBalance) == nil {
+            guard let obj = self.defaults.object(forKey: Keys.fakeStarsBalance) else {
                 return nil
             }
-            return Int64(self.defaults.integer(forKey: Keys.fakeStarsBalance))
+            return (obj as? NSNumber)?.int64Value ?? Int64(self.defaults.integer(forKey: Keys.fakeStarsBalance))
         }
         set {
             self.lock.lock()
             defer { self.lock.unlock() }
             if let val = newValue {
-                self.defaults.set(Int(val), forKey: Keys.fakeStarsBalance)
+                self.defaults.set(NSNumber(value: val), forKey: Keys.fakeStarsBalance)
             } else {
                 self.defaults.removeObject(forKey: Keys.fakeStarsBalance)
+            }
+        }
+    }
+    
+    public var fakeTonBalance: Double? {
+        get {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            if self.defaults.object(forKey: Keys.fakeTonBalance) == nil {
+                return nil
+            }
+            return self.defaults.double(forKey: Keys.fakeTonBalance)
+        }
+        set {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            if let val = newValue {
+                self.defaults.set(val, forKey: Keys.fakeTonBalance)
+            } else {
+                self.defaults.removeObject(forKey: Keys.fakeTonBalance)
+            }
+        }
+    }
+    
+    public var fakeMainUsername: String? {
+        get {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            let val = self.defaults.string(forKey: Keys.fakeMainUsername)
+            return (val?.isEmpty ?? true) ? nil : val
+        }
+        set {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            if let val = newValue, !val.isEmpty {
+                self.defaults.set(val, forKey: Keys.fakeMainUsername)
+            } else {
+                self.defaults.removeObject(forKey: Keys.fakeMainUsername)
+            }
+        }
+    }
+    
+    public var fakePurchaseDateString: String? {
+        get {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            return self.defaults.string(forKey: Keys.fakePurchaseDateString)
+        }
+        set {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            if let val = newValue, !val.isEmpty {
+                self.defaults.set(val, forKey: Keys.fakePurchaseDateString)
+            } else {
+                self.defaults.removeObject(forKey: Keys.fakePurchaseDateString)
+            }
+        }
+    }
+    
+    public var fakePurchaseDateTimestamp: Int32 {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        if let raw = self.defaults.string(forKey: Keys.fakePurchaseDateString)?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
+            if let numeric = Int32(raw), numeric > 100000000 {
+                return numeric
+            }
+            let formats = ["dd.MM.yyyy", "yyyy-MM-dd", "dd/MM/yyyy", "d MMMM yyyy", "dd.MM.yy"]
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "ru_RU")
+            for f in formats {
+                formatter.dateFormat = f
+                if let d = formatter.date(from: raw) {
+                    return Int32(d.timeIntervalSince1970)
+                }
+            }
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            for f in formats {
+                formatter.dateFormat = f
+                if let d = formatter.date(from: raw) {
+                    return Int32(d.timeIntervalSince1970)
+                }
+            }
+        }
+        return Int32(Date().timeIntervalSince1970 - 86400 * 365)
+    }
+    
+    public var fakeEmojiStatusFileId: Int64? {
+        get {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            guard let obj = self.defaults.object(forKey: Keys.fakeEmojiStatusFileId) else {
+                return nil
+            }
+            return (obj as? NSNumber)?.int64Value ?? Int64(self.defaults.integer(forKey: Keys.fakeEmojiStatusFileId))
+        }
+        set {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            if let val = newValue {
+                self.defaults.set(NSNumber(value: val), forKey: Keys.fakeEmojiStatusFileId)
+            } else {
+                self.defaults.removeObject(forKey: Keys.fakeEmojiStatusFileId)
+            }
+        }
+    }
+    
+    public var fakeNameColor: Int32? {
+        get {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            if self.defaults.object(forKey: Keys.fakeNameColor) == nil {
+                return nil
+            }
+            return Int32(self.defaults.integer(forKey: Keys.fakeNameColor))
+        }
+        set {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            if let val = newValue {
+                self.defaults.set(Int(val), forKey: Keys.fakeNameColor)
+            } else {
+                self.defaults.removeObject(forKey: Keys.fakeNameColor)
+            }
+        }
+    }
+    
+    public var fakeProfileColor: Int32? {
+        get {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            if self.defaults.object(forKey: Keys.fakeProfileColor) == nil {
+                return nil
+            }
+            return Int32(self.defaults.integer(forKey: Keys.fakeProfileColor))
+        }
+        set {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            if let val = newValue {
+                self.defaults.set(Int(val), forKey: Keys.fakeProfileColor)
+            } else {
+                self.defaults.removeObject(forKey: Keys.fakeProfileColor)
+            }
+        }
+    }
+    
+    public var fakeReplyBackgroundEmojiId: Int64? {
+        get {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            guard let obj = self.defaults.object(forKey: Keys.fakeReplyBackgroundEmojiId) else {
+                return nil
+            }
+            return (obj as? NSNumber)?.int64Value ?? Int64(self.defaults.integer(forKey: Keys.fakeReplyBackgroundEmojiId))
+        }
+        set {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            if let val = newValue {
+                self.defaults.set(NSNumber(value: val), forKey: Keys.fakeReplyBackgroundEmojiId)
+            } else {
+                self.defaults.removeObject(forKey: Keys.fakeReplyBackgroundEmojiId)
+            }
+        }
+    }
+    
+    public var fakeProfileBackgroundEmojiId: Int64? {
+        get {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            guard let obj = self.defaults.object(forKey: Keys.fakeProfileBackgroundEmojiId) else {
+                return nil
+            }
+            return (obj as? NSNumber)?.int64Value ?? Int64(self.defaults.integer(forKey: Keys.fakeProfileBackgroundEmojiId))
+        }
+        set {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            if let val = newValue {
+                self.defaults.set(NSNumber(value: val), forKey: Keys.fakeProfileBackgroundEmojiId)
+            } else {
+                self.defaults.removeObject(forKey: Keys.fakeProfileBackgroundEmojiId)
             }
         }
     }

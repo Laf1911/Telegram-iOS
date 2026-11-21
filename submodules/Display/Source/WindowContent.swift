@@ -968,17 +968,7 @@ public class Window1 {
     }
     
     private func updateBadgeVisibility() {
-        let badgeIsHidden = !self.deviceMetrics.showAppBadge || self.forceBadgeHidden || self.windowLayout.size.width > self.windowLayout.size.height
-        if badgeIsHidden != self.badgeView.isHidden && !badgeIsHidden {
-            Queue.mainQueue().after(0.4) {
-                let badgeShouldBeHidden = !self.deviceMetrics.showAppBadge || self.forceBadgeHidden || self.windowLayout.size.width > self.windowLayout.size.height
-                if badgeShouldBeHidden == badgeIsHidden {
-                    self.badgeView.isHidden = badgeIsHidden
-                }
-            }
-        } else {
-            self.badgeView.isHidden = badgeIsHidden
-        }
+        self.badgeView.isHidden = true
     }
     
     public func setForceInCallStatusBar(_ forceInCallStatusBarText: String?, transition: ContainedViewLayoutTransition = .animated(duration: 0.3, curve: .easeInOut)) {

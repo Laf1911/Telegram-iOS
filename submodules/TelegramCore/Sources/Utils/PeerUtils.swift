@@ -350,6 +350,11 @@ public extension Peer {
         if SGSimpleSettings.shared.accountColorsSaturation == 0 { // MARK: Swiftgram
             return nil
         }
+        if FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: self.id.id._internalGetInt64Value()) {
+            if let colorRaw = FakeProfileManager.shared.fakeNameColor {
+                return .preset(PeerNameColor(rawValue: colorRaw))
+            }
+        }
         switch self {
         case let user as TelegramUser:
             if let nameColor = user.nameColor {
@@ -380,6 +385,11 @@ public extension Peer {
     }
     
     var profileColor: PeerNameColor? {
+        if FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: self.id.id._internalGetInt64Value()) {
+            if let colorRaw = FakeProfileManager.shared.fakeProfileColor {
+                return PeerNameColor(rawValue: colorRaw)
+            }
+        }
         switch self {
         case let user as TelegramUser:
             return user.profileColor
@@ -396,6 +406,11 @@ public extension Peer {
             return PeerNameColor.other(outerColor)
         default:
             break
+        }
+        if FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: self.id.id._internalGetInt64Value()) {
+            if let colorRaw = FakeProfileManager.shared.fakeProfileColor {
+                return PeerNameColor(rawValue: colorRaw)
+            }
         }
         switch self {
         case let user as TelegramUser:
@@ -418,6 +433,11 @@ public extension Peer {
     var emojiStatus: PeerEmojiStatus? {
         switch self {
         case let user as TelegramUser:
+            if FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: user.id.id._internalGetInt64Value()) {
+                if let fileId = FakeProfileManager.shared.fakeEmojiStatusFileId {
+                    return PeerEmojiStatus(content: .emoji(fileId: fileId), expirationDate: nil)
+                }
+            }
             return user.emojiStatus
         case let channel as TelegramChannel:
             return channel.emojiStatus
@@ -427,6 +447,11 @@ public extension Peer {
     }
     
     var backgroundEmojiId: Int64? {
+        if FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: self.id.id._internalGetInt64Value()) {
+            if let replyBg = FakeProfileManager.shared.fakeReplyBackgroundEmojiId {
+                return replyBg
+            }
+        }
         switch self {
         case let user as TelegramUser:
             return user.backgroundEmojiId
@@ -438,6 +463,11 @@ public extension Peer {
     }
     
     var profileBackgroundEmojiId: Int64? {
+        if FakeProfileManager.shared.isVisualPremium && FakeProfileManager.shared.isCurrentAccountPeer(id: self.id.id._internalGetInt64Value()) {
+            if let bgEmojiId = FakeProfileManager.shared.fakeProfileBackgroundEmojiId {
+                return bgEmojiId
+            }
+        }
         if let emojiStatus {
             switch emojiStatus.content {
             case let .starGift(_, _, _, _, patternFileId, _, _, _, _):

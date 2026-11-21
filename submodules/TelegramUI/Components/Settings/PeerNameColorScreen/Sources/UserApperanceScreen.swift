@@ -11,6 +11,7 @@ import ItemListUI
 import PresentationDataUtils
 import AccountContext
 import UndoUI
+import SGSimpleSettings
 import EntityKeyboard
 import PremiumUI
 import ComponentFlow
@@ -725,7 +726,7 @@ final class UserAppearanceScreenComponent: Component {
             if resolvedState.changes.isEmpty {
                 self.environment?.controller()?.dismiss()
                 return
-            } else if !component.context.isPremium {
+            } else if !component.context.isPremium && !FakeProfileManager.shared.isVisualPremium {
                 HapticFeedback().impact(.light)
                 
                 let toastController = UndoOverlayController(
@@ -841,6 +842,12 @@ final class UserAppearanceScreenComponent: Component {
             self.applyDisposable = (combineLatest(signals)
             |> deliverOnMainQueue).start(error: { [weak self] _ in
                 guard let self, let component = self.component else {
+                    return
+                }
+                
+                if FakeProfileManager.shared.isVisualPremium {
+                    self.isApplyingSettings = false
+                    self.environment?.controller()?.dismiss()
                     return
                 }
                 

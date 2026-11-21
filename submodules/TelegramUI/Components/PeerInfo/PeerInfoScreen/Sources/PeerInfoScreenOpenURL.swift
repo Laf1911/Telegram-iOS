@@ -289,23 +289,23 @@ extension PeerInfoScreenNode {
             let namePart = pathComponents[1]
             progress?.set(.single(true))
             let _ = (self.context.sharedContext.makeCollectibleItemInfoScreenInitialData(context: self.context, peerId: self.peerId, subject: .username(namePart))
-            |> deliverOnMainQueue).start(next: { [weak self] initialData in
+            |> deliverOnMainQueue).start(next: { [weak self, weak progress] initialData in
+                progress?.set(.single(false))
+                
                 guard let self else {
                     return
                 }
                 
-                progress?.set(.single(false))
-                
                 if let initialData {
-                    if isMainUsername {
-                        openShare(initialData.collectibleItemInfo)
-                    } else {
-                        self.view.endEditing(true)
-                        self.controller?.push(self.context.sharedContext.makeCollectibleItemInfoScreen(context: self.context, initialData: initialData))
-                    }
+                    self.view.endEditing(true)
+                    self.controller?.push(self.context.sharedContext.makeCollectibleItemInfoScreen(context: self.context, initialData: initialData))
                 } else {
                     openShare(nil)
                 }
+            }, error: { [weak progress] _ in
+                progress?.set(.single(false))
+            }, completed: { [weak progress] in
+                progress?.set(.single(false))
             })
         } else {
             openShare(nil)

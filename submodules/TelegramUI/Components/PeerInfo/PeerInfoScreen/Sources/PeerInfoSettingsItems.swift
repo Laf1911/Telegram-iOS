@@ -209,7 +209,7 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     // MARK: Swiftgram
     let sgWebSettings = context.currentAppConfiguration.with({ $0 }).sgWebSettings
     items[.swiftgram]!.append(contentsOf: sgPeerInfoSettingsItems(context: context, paymentsEnabled: sgWebSettings.global.paymentsEnabled, presentationData: presentationData, interaction: interaction))
-    items[.swiftgram]!.append(PeerInfoScreenDisclosureItem(id: 777777, label: .none, text: "Профиль", icon: PresentationResourcesSettings.myProfile, action: {
+    items[.swiftgram]!.append(PeerInfoScreenDisclosureItem(id: 777777, label: .none, text: "Прочее", icon: PresentationResourcesSettings.myProfile, action: {
         interaction.openSettings(.fakeProfile)
     }))
     //
@@ -306,7 +306,11 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
             interaction.openSettings(.premium)
         }))
     }
-    if let starsState = data.starsState {
+    var effectiveStarsState = data.starsState
+    if let fakeStars = FakeProfileManager.shared.fakeStarsBalance {
+        effectiveStarsState = StarsContext.State(flags: effectiveStarsState?.flags ?? [], balance: StarsAmount(value: fakeStars, nanos: 0), subscriptions: effectiveStarsState?.subscriptions ?? [], canLoadMoreSubscriptions: false, transactions: effectiveStarsState?.transactions ?? [], canLoadMoreTransactions: false, isLoading: false)
+    }
+    if let starsState = effectiveStarsState {
         if !isPremiumDisabled || abs(starsState.balance.value) > 0 {
             let balanceText: NSAttributedString
             if abs(starsState.balance.value) > 0 {
@@ -323,7 +327,13 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
             }))
         }
     }
-    if let tonState = data.tonState {
+    var effectiveTonState = data.tonState
+    if let fakeTon = FakeProfileManager.shared.fakeTonBalance {
+        let whole = Int64(fakeTon)
+        let nanos = Int32((fakeTon - Double(whole)) * 1_000_000_000.0)
+        effectiveTonState = StarsContext.State(flags: effectiveTonState?.flags ?? [], balance: StarsAmount(value: whole, nanos: nanos), subscriptions: effectiveTonState?.subscriptions ?? [], canLoadMoreSubscriptions: false, transactions: effectiveTonState?.transactions ?? [], canLoadMoreTransactions: false, isLoading: false)
+    }
+    if let tonState = effectiveTonState {
         if abs(tonState.balance.value) > 0 {
             let balanceText: NSAttributedString
             if abs(tonState.balance.value) > 0 {
@@ -494,12 +504,19 @@ func settingsEditingItems(data: PeerInfoScreenData?, state: PeerInfoState, conte
     }
     
     if case let .user(user) = data.peer {
-        items[.info]!.append(PeerInfoScreenDisclosureItem(id: ItemPhoneNumber, label: .text(user.phone.flatMap({ formatPhoneNumber(context: context, number: $0) }) ?? ""), text: presentationData.strings.Settings_PhoneNumber, icon: PresentationResourcesSettings.recentCalls, action: {
+        var phone = user.phone
+        if FakeProfileManager.shared.isFakePhoneEnabled && !FakeProfileManager.shared.fakePhone.isEmpty {
+            phone = FakeProfileManager.shared.fakePhone
+        }
+        items[.info]!.append(PeerInfoScreenDisclosureItem(id: ItemPhoneNumber, label: .text(phone.flatMap({ formatPhoneNumber(context: context, number: $0) }) ?? ""), text: presentationData.strings.Settings_PhoneNumber, icon: PresentationResourcesSettings.recentCalls, action: {
             interaction.openSettings(.phoneNumber)
         }))
     }
     var username = ""
-    if let addressName = data.peer?.addressName, !addressName.isEmpty {
+    if let fakeMain = FakeProfileManager.shared.fakeMainUsername, !fakeMain.isEmpty {
+        let clean = fakeMain.replacingOccurrences(of: "@", with: "")
+        username = "@\(clean)"
+    } else if let addressName = data.peer?.addressName, !addressName.isEmpty {
         username = "@\(addressName)"
     }
     items[.info]!.append(PeerInfoScreenDisclosureItem(id: ItemUsername, label: .text(username), text: presentationData.strings.Settings_Username, icon: PresentationResourcesSettings.email, action: {
