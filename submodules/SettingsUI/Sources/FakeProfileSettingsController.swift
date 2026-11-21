@@ -659,7 +659,7 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
                     )
                     FakeProfileManager.shared.addGift(item, for: currentPeerId)
                     updateState()
-                })
+                }))
             }))
             
             context.sharedContext.mainWindow?.presentNative(alert)
@@ -805,7 +805,7 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
     
     let controller = ItemListController(context: context, state: signal)
     presentControllerImpl = { [weak controller] c, a in
-        controller?.present(c, in: .window(PresentationSurfaceLevel.root), with: a)
+        controller?.present(c, in: PresentationContextType.window(PresentationSurfaceLevel.root), with: a)
     }
     return controller
 }
