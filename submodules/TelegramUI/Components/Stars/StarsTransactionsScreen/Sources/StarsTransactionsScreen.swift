@@ -729,7 +729,7 @@ final class StarsTransactionsScreenComponent: Component {
             contentHeight += 29.0
             
             let withdrawAvailable = (self.revenueState?.balances.overallRevenue.amount.value ?? 0) > 0
-            /* MARK: Swiftgram */ // let tonWithdrawAvailable = (self.revenueState?.balances.availableBalance.amount ?? StarsAmount.zero) > StarsAmount.zero
+            let tonWithdrawAvailable = (self.revenueState?.balances.availableBalance.amount ?? StarsAmount.zero) > StarsAmount.zero
              
             if component.starsContext.ton {
                 let proceedsSize = self.proceedsView.update(
