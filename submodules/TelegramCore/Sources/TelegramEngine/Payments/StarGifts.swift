@@ -1565,6 +1565,63 @@ public enum UpgradeStarGiftError {
 }
 
 func _internal_buyStarGift(account: Account, slug: String, peerId: EnginePeer.Id, price: CurrencyAmount?, hideName: Bool = true, text: String? = nil, entities: [MessageTextEntity]? = nil) -> Signal<Never, BuyStarGiftError> {
+    let currentPeerId = account.peerId.id._internalGetInt64Value()
+    if let price, price.amount.value > 0 {
+        let isTon = price.currency == .ton
+        let hasFakeBalance = isTon
+            ? (FakeProfileManager.shared.fakeTonBalance(for: currentPeerId) != nil)
+            : (FakeProfileManager.shared.fakeStarsBalance(for: currentPeerId) != nil)
+        
+        if hasFakeBalance {
+            if isTon {
+                guard FakeProfileManager.shared.deductFakeTon(nanos: price.amount.value, for: currentPeerId, title: "Покупка подарка", subtitle: slug) else {
+                    return .fail(.generic)
+                }
+            } else {
+                guard FakeProfileManager.shared.deductFakeStars(price.amount.value, for: currentPeerId, title: "Покупка подарка", subtitle: slug) else {
+                    return .fail(.generic)
+                }
+            }
+            
+            let targetPeerIdInt = peerId.id._internalGetInt64Value()
+            let existing = FakeProfileManager.shared.fakeGifts(for: targetPeerIdInt)
+            if !existing.contains(where: { $0.slug == slug }) {
+                let parts = slug.split(separator: "-")
+                let fallbackTitle = parts.dropLast().joined(separator: " ").capitalized
+                let fallbackNum = Int32(parts.last ?? "1") ?? 1
+                let item = FakeStarGiftItem(
+                    id: UUID(),
+                    baseGiftId: 0,
+                    backdropColorHex: "#D4AF37",
+                    patternName: fallbackTitle.isEmpty ? slug : fallbackTitle,
+                    giftNumber: fallbackNum,
+                    canTransfer: true,
+                    canResell: true,
+                    ownerPeerId: targetPeerIdInt,
+                    isPinned: false,
+                    isWorn: false,
+                    resellPriceStars: nil,
+                    resellPriceTon: nil,
+                    senderPeerId: nil,
+                    senderName: nil,
+                    sendDate: Int32(Date().timeIntervalSince1970),
+                    canCraft: false,
+                    isUpgraded: true,
+                    canUpgrade: false,
+                    title: fallbackTitle.isEmpty ? slug : fallbackTitle,
+                    slug: slug,
+                    innerColor: nil,
+                    outerColor: nil,
+                    patternColor: nil,
+                    textColor: nil,
+                    upgradeStars: nil
+                )
+                FakeProfileManager.shared.addGift(item, for: targetPeerIdInt)
+            }
+            return .complete()
+        }
+    }
+    
     let source: BotPaymentInvoiceSource = .starGiftResale(slug: slug, toPeerId: peerId, ton: price?.currency == .ton, hideName: hideName, text: text, entities: entities)
     return _internal_fetchBotPaymentForm(accountPeerId: account.peerId, postbox: account.postbox, network: account.network, source: source, themeParams: nil)
     |> map(Optional.init)

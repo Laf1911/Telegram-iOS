@@ -344,6 +344,11 @@ public final class FakeProfileManager: @unchecked Sendable {
         return Int64((clamped * 1_000_000_000.0).rounded())
     }
     
+    // Безопасная конвертация нанотонов в TON (1 TON = 1_000_000_000 нанотонов)
+    public static func nanosToTon(_ nanos: Int64) -> Double {
+        return Double(nanos) / 1_000_000_000.0
+    }
+    
     // Баланс TON (значение в ТОНах, например 68.2)
     public func fakeTonBalance(for peerId: Int64? = nil) -> Double? {
         self.lock.lock()
@@ -398,6 +403,44 @@ public final class FakeProfileManager: @unchecked Sendable {
     
     public func addTransaction(_ item: FakeTransactionItem, for peerId: Int64? = nil) {
         self.addFakeTransaction(item, for: peerId)
+    }
+    
+    // Атомарное списание Stars с проверкой баланса и созданием транзакции (защита от гонок и double-spending)
+    public func deductFakeStars(_ amount: Int64, for peerId: Int64, title: String = "Покупка подарка", subtitle: String = "") -> Bool {
+        guard amount > 0 else { return false }
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let current = self.readValue(baseKey: Keys.fakeStarsBalance, peerId: peerId) { k in
+            (self.defaults.object(forKey: k) as? NSNumber)?.int64Value ?? Int64(self.defaults.integer(forKey: k))
+        } ?? 0
+        guard current >= amount else {
+            return false
+        }
+        let newBalance = current - amount
+        let key = self.accountKey(Keys.fakeStarsBalance, peerId: peerId)
+        self.defaults.set(NSNumber(value: newBalance), forKey: key)
+        self.addFakeTransaction(FakeTransactionItem(isTon: false, amount: amount, title: title, subtitle: subtitle, date: Int32(Date().timeIntervalSince1970), isIncoming: false), for: peerId)
+        return true
+    }
+    
+    // Атомарное списание TON (в нанотонах) с проверкой баланса и созданием транзакции (защита от потери точности и double-spending)
+    public func deductFakeTon(nanos: Int64, for peerId: Int64, title: String = "Покупка подарка", subtitle: String = "") -> Bool {
+        guard nanos > 0 else { return false }
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        guard let currentTon = self.readValue(baseKey: Keys.fakeTonBalance, peerId: peerId, read: { k in self.defaults.double(forKey: k) }) else {
+            return false
+        }
+        let currentNanos = Self.tonToNanos(currentTon)
+        guard currentNanos >= nanos else {
+            return false
+        }
+        let remainingNanos = currentNanos - nanos
+        let newTon = Self.nanosToTon(remainingNanos)
+        let key = self.accountKey(Keys.fakeTonBalance, peerId: peerId)
+        self.defaults.set(newTon, forKey: key)
+        self.addFakeTransaction(FakeTransactionItem(isTon: true, amount: nanos, title: title, subtitle: subtitle, date: Int32(Date().timeIntervalSince1970), isIncoming: false), for: peerId)
+        return true
     }
     
     public var fakeTonBalance: Double? {
@@ -849,6 +892,11 @@ public final class FakeProfileManager: @unchecked Sendable {
         var mutItem = item
         mutItem.ownerPeerId = targetOwner
         var items = self.fakeGifts(for: targetOwner)
+        items.removeAll(where: {
+            $0.id == mutItem.id ||
+            (mutItem.slug != nil && !mutItem.slug!.isEmpty && $0.slug?.lowercased() == mutItem.slug?.lowercased()) ||
+            (mutItem.baseGiftId != 0 && mutItem.giftNumber != 0 && $0.baseGiftId == mutItem.baseGiftId && $0.giftNumber == mutItem.giftNumber)
+        })
         items.insert(mutItem, at: 0)
         self.setFakeGifts(items, for: targetOwner)
     }

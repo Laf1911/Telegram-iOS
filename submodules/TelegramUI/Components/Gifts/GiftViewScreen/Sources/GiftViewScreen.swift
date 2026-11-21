@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import SGSimpleSettings
 import Display
 import AsyncDisplayKit
 import TelegramCore
@@ -2461,31 +2462,37 @@ private final class GiftViewSheetContent: CombinedComponent {
             let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
             let giftTitle = "\(uniqueGift.title) #\(formatCollectibleNumber(uniqueGift.number, dateTimeFormat: presentationData.dateTimeFormat))"
             
-            if let resellTooEarlyTimestamp = self.resellTooEarlyTimestamp {
-                let dateString = stringForFullDate(timestamp: resellTooEarlyTimestamp, strings: presentationData.strings, dateTimeFormat: presentationData.dateTimeFormat)
-                let alertController = textAlertController(
-                    context: context,
-                    title: presentationData.strings.Gift_Buy_ErrorTooEarly_Title,
-                    text: presentationData.strings.Gift_Buy_ErrorTooEarly_Text(dateString).string,
-                    actions: [
-                        TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})
-                    ],
-                    parseMarkdown: true
-                )
-                controller.present(alertController, in: .window(.root))
-                return
-            }
+            let currentPeerId = self.context.account.peerId.id._internalGetInt64Value()
+            let isTon = (acceptedPrice?.currency == .ton) || uniqueGift.resellForTonOnly
+            let hasFakeBalance = isTon ? (FakeProfileManager.shared.fakeTonBalance(for: currentPeerId) != nil) : (FakeProfileManager.shared.fakeStarsBalance(for: currentPeerId) != nil)
             
-            guard let _ = self.buyForm else {
-                let alertController = textAlertController(
-                    context: context,
-                    title: nil,
-                    text: presentationData.strings.Gift_Buy_ErrorUnknown,
-                    actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})],
-                    parseMarkdown: true
-                )
-                controller.present(alertController, in: .window(.root))
-                return
+            if !hasFakeBalance {
+                if let resellTooEarlyTimestamp = self.resellTooEarlyTimestamp {
+                    let dateString = stringForFullDate(timestamp: resellTooEarlyTimestamp, strings: presentationData.strings, dateTimeFormat: presentationData.dateTimeFormat)
+                    let alertController = textAlertController(
+                        context: context,
+                        title: presentationData.strings.Gift_Buy_ErrorTooEarly_Title,
+                        text: presentationData.strings.Gift_Buy_ErrorTooEarly_Text(dateString).string,
+                        actions: [
+                            TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})
+                        ],
+                        parseMarkdown: true
+                    )
+                    controller.present(alertController, in: .window(.root))
+                    return
+                }
+                
+                guard let _ = self.buyForm else {
+                    let alertController = textAlertController(
+                        context: context,
+                        title: nil,
+                        text: presentationData.strings.Gift_Buy_ErrorUnknown,
+                        actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})],
+                        parseMarkdown: true
+                    )
+                    controller.present(alertController, in: .window(.root))
+                    return
+                }
             }
             
             let recipientPeerId = self.recipientPeerId ?? self.context.account.peerId
