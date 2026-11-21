@@ -716,7 +716,7 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
             context.sharedContext.mainWindow?.presentNative(alert)
         },
         openGiftStore: {
-            let giftsController = context.sharedContext.makePremiumGiftController(context: context, source: .settings([]), completion: nil)
+            let giftsController = context.sharedContext.makePremiumGiftController(context: context, source: .settings(nil), completion: nil)
             presentControllerImpl?(giftsController, ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
         },
         addCustomGift: {
@@ -731,10 +731,11 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
         }
     )
     
-    let signal = combineLatest(
+    let signal: Signal<(ItemListControllerState, (ItemListNodeState, Any)), NoError> = combineLatest(
         context.sharedContext.presentationData,
         statePromise.get()
     )
+    |> deliverOnMainQueue
     |> map { presentationData, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
         var entries: [FakeProfileEntry] = []
         let manager = FakeProfileManager.shared
