@@ -3,7 +3,7 @@ import UIKit
 import Display
 import AsyncDisplayKit
 import SwiftSignalKit
-import TelegramCore
+@preconcurrency import TelegramCore
 import TelegramPresentationData
 import ItemListUI
 import PresentationDataUtils
@@ -50,7 +50,7 @@ public struct OfficialGiftBackdrop: Equatable, Sendable {
 
 // MARK: - Пресеты моделей подарков Telegram
 
-public struct OfficialGiftModelItem: Equatable, Sendable {
+public struct OfficialGiftModelItem: Equatable, @unchecked Sendable {
     public let id: Int64
     public let title: String
     public let file: TelegramMediaFile?
@@ -735,7 +735,7 @@ private enum FakeGiftConstructorEntry: ItemListNodeEntry {
     }
 }
 
-private struct FakeGiftConstructorState: Equatable, Sendable {
+private struct FakeGiftConstructorState: Equatable, @unchecked Sendable {
     var selectedModel: OfficialGiftModelItem
     var selectedBackdrop: OfficialGiftBackdrop
     var selectedPatternName: String
