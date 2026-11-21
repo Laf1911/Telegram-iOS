@@ -265,7 +265,7 @@ final class FakeGiftModelsCarouselItem: ListViewItem, ItemListItem {
 private final class FakeGiftModelCellView: UIButton {
     private var animationNode: AnimatedStickerNode?
     private let label = UILabel()
-    private var currentFileId: MediaId?
+    private var currentModelId: Int64?
     
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -298,8 +298,8 @@ private final class FakeGiftModelCellView: UIButton {
         self.label.frame = CGRect(x: 4.0, y: 68.0, width: self.bounds.width - 8.0, height: 26.0)
         
         if let file = model.file {
-            if self.currentFileId != file.fileId {
-                self.currentFileId = file.fileId
+            if self.currentModelId != model.id {
+                self.currentModelId = model.id
                 let animNode: AnimatedStickerNode
                 if let existing = self.animationNode {
                     animNode = existing
@@ -321,7 +321,7 @@ private final class FakeGiftModelCellView: UIButton {
         self.animationNode?.stop()
         self.animationNode?.view.removeFromSuperview()
         self.animationNode = nil
-        self.currentFileId = nil
+        self.currentModelId = nil
     }
     
     deinit {
