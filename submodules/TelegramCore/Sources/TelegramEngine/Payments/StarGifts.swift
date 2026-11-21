@@ -2028,7 +2028,7 @@ private func generateSingleFakeStarGift(item: FakeStarGiftItem, targetPeerId: En
     let origInfo = StarGift.UniqueGift.Attribute.originalInfo(
         senderPeerId: item.senderPeerId.flatMap { $0 != 0 ? EnginePeer.Id($0) : nil },
         recipientPeerId: targetPeerId,
-        date: (item.sendDate ?? 0) != 0 ? (item.sendDate ?? 0) : Int32(Date().timeIntervalSince1970 - 86400 * 7),
+        date: item.sendDate != 0 ? item.sendDate : Int32(Date().timeIntervalSince1970 - 86400 * 7),
         text: nil,
         entities: nil
     )
