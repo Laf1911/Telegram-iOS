@@ -2012,18 +2012,18 @@ private func generateSingleFakeStarGift(item: FakeStarGiftItem, targetPeerId: En
         outerColor: backdropColor,
         patternColor: backdropColor,
         textColor: -1,
-        rarity: crafted ? .mythic : .rare
+        rarity: crafted ? .legendary : .rare
     )
     let modelAttr = StarGift.UniqueGift.Attribute.model(
         name: item.patternName,
         file: placeholderFile,
-        rarity: crafted ? .mythic : .rare,
+        rarity: crafted ? .legendary : .rare,
         crafted: crafted
     )
     let patternAttr = StarGift.UniqueGift.Attribute.pattern(
         name: item.patternName,
         file: placeholderFile,
-        rarity: crafted ? .mythic : .rare
+        rarity: crafted ? .legendary : .rare
     )
     let origInfo = StarGift.UniqueGift.Attribute.originalInfo(
         senderPeerId: item.senderPeerId.flatMap { $0 != 0 ? EnginePeer.Id($0) : nil },
