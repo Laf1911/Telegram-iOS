@@ -302,8 +302,6 @@ extension PeerInfoScreenNode {
                 } else {
                     openShare(nil)
                 }
-            }, error: { [weak progress] _ in
-                progress?.set(.single(false))
             }, completed: { [weak progress] in
                 progress?.set(.single(false))
             })

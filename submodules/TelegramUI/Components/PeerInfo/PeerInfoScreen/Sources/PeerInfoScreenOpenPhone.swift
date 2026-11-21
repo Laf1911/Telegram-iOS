@@ -37,8 +37,6 @@ extension PeerInfoScreenNode {
                 } else {
                     self.context.sharedContext.openExternalUrl(context: self.context, urlContext: .generic, url: "https://fragment.com/numbers", forceExternal: true, presentationData: self.presentationData, navigationController: nil, dismissInput: {})
                 }
-            }, error: { [weak progress] _ in
-                progress?.set(.single(false))
             }, completed: { [weak progress] in
                 progress?.set(.single(false))
             })
