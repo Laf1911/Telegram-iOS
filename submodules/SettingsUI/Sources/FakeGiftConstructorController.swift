@@ -132,7 +132,7 @@ private final class FakeGiftPreviewItemNode: ListViewItemNode, ItemListItemNode 
     private let numberBadgeNode = ASTextNode()
     private let titleBadgeNode = ASTextNode()
     
-    override init() {
+    init() {
         super.init(layerBacked: false)
         self.addSubnode(self.cardContainerNode)
         self.cardContainerNode.layer.cornerRadius = 24.0
@@ -335,7 +335,7 @@ private final class FakeGiftModelsCarouselItemNode: ListViewItemNode, ItemListIt
     private let scrollView = UIScrollView()
     private var itemViews: [FakeGiftModelCellView] = []
     
-    override init() {
+    init() {
         super.init(layerBacked: false)
         self.scrollView.showsHorizontalScrollIndicator = false
         self.scrollView.alwaysBounceHorizontal = true
@@ -446,7 +446,7 @@ private final class FakeGiftBackdropCarouselItemNode: ListViewItemNode, ItemList
     private let scrollView = UIScrollView()
     private var itemViews: [UIView] = []
     
-    override init() {
+    init() {
         super.init(layerBacked: false)
         self.scrollView.showsHorizontalScrollIndicator = false
         self.scrollView.alwaysBounceHorizontal = true
