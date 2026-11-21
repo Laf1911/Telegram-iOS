@@ -1103,7 +1103,7 @@ public final class StarsContext {
         public var canLoadMoreTransactions: Bool
         public var isLoading: Bool
         
-        init(flags: Flags, balance: StarsAmount, subscriptions: [Subscription], canLoadMoreSubscriptions: Bool, transactions: [Transaction], canLoadMoreTransactions: Bool, isLoading: Bool) {
+        public init(flags: Flags, balance: StarsAmount, subscriptions: [Subscription], canLoadMoreSubscriptions: Bool, transactions: [Transaction], canLoadMoreTransactions: Bool, isLoading: Bool) {
             self.flags = flags
             self.balance = balance
             self.subscriptions = subscriptions
