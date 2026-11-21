@@ -477,15 +477,12 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
         },
         updateStarsBalance: { balance in
             FakeProfileManager.shared.fakeStarsBalance = balance
-            updateState()
         },
         updateTonBalance: { balance in
             FakeProfileManager.shared.fakeTonBalance = balance
-            updateState()
         },
         updateMainUsername: { username in
             FakeProfileManager.shared.fakeMainUsername = username
-            updateState()
         },
         updateFakePhoneEnabled: { value in
             FakeProfileManager.shared.isFakePhoneEnabled = value
@@ -493,27 +490,21 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
         },
         updateFakePhone: { phone in
             FakeProfileManager.shared.fakePhone = phone
-            updateState()
         },
         updateFakePhonePriceTon: { price in
             FakeProfileManager.shared.fakePhonePriceTon = price
-            updateState()
         },
         updatePurchaseDate: { date in
             FakeProfileManager.shared.fakePurchaseDateString = date
-            updateState()
         },
         updateChannelTitle: { title in
             FakeProfileManager.shared.fakeChannelTitle = title
-            updateState()
         },
         updateBusinessLocation: { location in
             FakeProfileManager.shared.fakeBusinessLocation = location
-            updateState()
         },
         updateBusinessHours: { hours in
             FakeProfileManager.shared.fakeBusinessHours = hours
-            updateState()
         },
         addUsername: {
             let alert = UIAlertController(
@@ -574,7 +565,13 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
         entries.append(.visualPremiumToggle(manager.isVisualPremium))
         let starsText = manager.fakeStarsBalance.flatMap { "\($0)" } ?? ""
         entries.append(.starsBalanceInput("Баланс Звезд", starsText))
-        let tonText = manager.fakeTonBalance.flatMap { String(format: "%.1f", $0) } ?? ""
+        let tonText = manager.fakeTonBalance.flatMap { val -> String in
+            if val.truncatingRemainder(dividingBy: 1) == 0 {
+                return "\(Int64(val))"
+            } else {
+                return "\(val)"
+            }
+        } ?? ""
         entries.append(.tonBalanceInput("Баланс TON", tonText))
         entries.append(.premiumNotice("Визуально активирует статус Premium и заменяет баланс Звезд и TON во всех экранах приложения."))
         
@@ -583,7 +580,9 @@ public func fakeProfileSettingsController(context: AccountContext) -> ViewContro
         entries.append(.fakeMainUsernameInput("Основной юзернейм", manager.fakeMainUsername ?? ""))
         entries.append(.fakePhoneToggle(manager.isFakePhoneEnabled))
         entries.append(.fakePhoneInput("Номер телефона", manager.fakePhone))
-        entries.append(.fakePhonePriceInput("Цена номера (TON)", String(format: "%.1f", manager.fakePhonePriceTon)))
+        let phonePriceVal = manager.fakePhonePriceTon
+        let phonePriceText = (phonePriceVal.truncatingRemainder(dividingBy: 1) == 0) ? "\(Int64(phonePriceVal))" : "\(phonePriceVal)"
+        entries.append(.fakePhonePriceInput("Цена номера (TON)", phonePriceText))
         entries.append(.fakePurchaseDateInput("Дата покупки Fragment", manager.fakePurchaseDateString ?? ""))
         entries.append(.fakeChannelTitleInput("Личный канал", manager.fakeChannelTitle))
         entries.append(.fakeBusinessLocationInput("Адрес (геопозиция)", manager.fakeBusinessLocation))

@@ -223,13 +223,17 @@ func infoItems(
         }
         
         var effectivePhone = user.phone
-        if isMyProfile && FakeProfileManager.shared.isFakePhoneEnabled && !FakeProfileManager.shared.fakePhone.isEmpty {
-            effectivePhone = FakeProfileManager.shared.fakePhone
+        let currentPeerId = context.account.peerId.toInt64()
+        if isMyProfile && FakeProfileManager.shared.isFakePhoneEnabled(for: currentPeerId) {
+            let fake = FakeProfileManager.shared.fakePhone(for: currentPeerId)
+            if !fake.isEmpty {
+                effectivePhone = fake
+            }
         }
         if let phone = effectivePhone, !(SGSimpleSettings.shared.hidePhoneInSettings && isMyProfile) {
             let formattedPhone = formatPhoneNumber(context: context, number: phone)
             let label: String
-            if formattedPhone.hasPrefix("+888 ") || phone.hasPrefix("888") || phone.hasPrefix("+888") || (isMyProfile && FakeProfileManager.shared.isFakePhoneEnabled) {
+            if formattedPhone.hasPrefix("+888 ") || phone.hasPrefix("888") || phone.hasPrefix("+888") || (isMyProfile && FakeProfileManager.shared.isFakePhoneEnabled(for: currentPeerId)) {
                 label = presentationData.strings.UserInfo_AnonymousNumberLabel
             } else {
                 label = presentationData.strings.ContactInfo_PhoneLabelMobile
@@ -244,14 +248,14 @@ func infoItems(
         }
         var effectiveUsernames = user.usernames
         if isMyProfile {
-            for fakeU in FakeProfileManager.shared.fakeUsernames {
+            for fakeU in FakeProfileManager.shared.fakeUsernames(for: currentPeerId) {
                 if !effectiveUsernames.contains(where: { $0.username.lowercased() == fakeU.username.lowercased() }) {
                     effectiveUsernames.append(TelegramPeerUsername(flags: .isActive, username: fakeU.username))
                 }
             }
         }
         var effectiveMainUsername = user.addressName ?? (isMyProfile ? effectiveUsernames.first?.username : nil)
-        if isMyProfile, let fakeMain = FakeProfileManager.shared.fakeMainUsername, !fakeMain.isEmpty {
+        if isMyProfile, let fakeMain = FakeProfileManager.shared.fakeMainUsername(for: currentPeerId), !fakeMain.isEmpty {
             let clean = fakeMain.replacingOccurrences(of: "@", with: "")
             effectiveMainUsername = clean
             if !effectiveUsernames.contains(where: { $0.username.lowercased() == clean.lowercased() }) {

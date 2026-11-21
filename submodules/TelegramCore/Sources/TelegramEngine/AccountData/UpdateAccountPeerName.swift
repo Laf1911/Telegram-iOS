@@ -119,8 +119,9 @@ func _internal_updateNameColorAndEmoji(account: Account, nameColor: UpdateNameCo
         nameColorValue = .preset(color)
         backgroundEmojiIdValue = backgroundEmojiId
         if FakeProfileManager.shared.isVisualPremium {
-            FakeProfileManager.shared.fakeNameColor = color.rawValue
-            FakeProfileManager.shared.fakeReplyBackgroundEmojiId = backgroundEmojiId
+            let currentPeerId = peerId.toInt64()
+            FakeProfileManager.shared.setFakeNameColor(color.rawValue, for: currentPeerId)
+            FakeProfileManager.shared.setFakeReplyBackgroundEmojiId(backgroundEmojiId, for: currentPeerId)
         }
     case let .collectible(color):
         inputRepliesColor = .inputPeerColorCollectible(.init(collectibleId: color.collectibleId))
@@ -128,10 +129,14 @@ func _internal_updateNameColorAndEmoji(account: Account, nameColor: UpdateNameCo
         backgroundEmojiIdValue = color.backgroundEmojiId
     }
     if FakeProfileManager.shared.isVisualPremium {
+        let currentPeerId = peerId.toInt64()
         if let profileColor {
-            FakeProfileManager.shared.fakeProfileColor = profileColor.rawValue
+            FakeProfileManager.shared.setFakeProfileColor(profileColor.rawValue, for: currentPeerId)
+        } else {
+            FakeProfileManager.shared.setFakeProfileColor(nil, for: currentPeerId)
+            FakeProfileManager.shared.resetProfileColor(for: currentPeerId)
         }
-        FakeProfileManager.shared.fakeProfileBackgroundEmojiId = profileBackgroundEmojiId
+        FakeProfileManager.shared.setFakeProfileBackgroundEmojiId(profileBackgroundEmojiId, for: currentPeerId)
     }
     var flagsProfile: Int32 = 0
     if profileColor != nil {

@@ -129,6 +129,7 @@ private enum SGSliderSetting: String {
 private enum SGDisclosureLink: String {
     case contentSettings
     case languageSettings
+    case fakeProfile
 }
 
 private struct PeerNameColorScreenState: Equatable {
@@ -152,6 +153,9 @@ private func SGControllerEntries(presentationData: PresentationData, callListSet
     let id = SGItemListCounter()
     
     entries.append(.searchInput(id: id.count, section: .search, title: NSAttributedString(string: "🔍"), text: state.searchQuery ?? "", placeholder: strings.Common_Search))
+    
+    entries.append(.header(id: id.count, section: .content, text: "ПРОФИЛЬ И КАСТОМИЗАЦИЯ", badge: nil))
+    entries.append(.disclosure(id: id.count, section: .content, link: .fakeProfile, text: "Прочее (баланс, юзернеймы, подарки)"))
     
     
     if SGSimpleSettings.shared.canUseNY {
@@ -689,6 +693,8 @@ public func sgSettingsController(context: AccountContext/*, focusOnItemTag: Int?
         switch (link) {
             case .languageSettings:
                 pushControllerImpl?(context.sharedContext.makeLocalizationListController(context: context))
+            case .fakeProfile:
+                pushControllerImpl?(context.sharedContext.makeFakeProfileSettingsController(context: context))
             case .contentSettings:
                 let _ = (getSGSettingsURL(context: context) |> deliverOnMainQueue).start(next: { [weak context] url in
                     guard let strongContext = context else {

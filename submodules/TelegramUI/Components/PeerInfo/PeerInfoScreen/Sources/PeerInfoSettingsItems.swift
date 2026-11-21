@@ -210,9 +210,6 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     // MARK: Swiftgram
     let sgWebSettings = context.currentAppConfiguration.with({ $0 }).sgWebSettings
     items[.swiftgram]!.append(contentsOf: sgPeerInfoSettingsItems(context: context, paymentsEnabled: sgWebSettings.global.paymentsEnabled, presentationData: presentationData, interaction: interaction))
-    items[.swiftgram]!.append(PeerInfoScreenDisclosureItem(id: 777777, label: .none, text: "Прочее", icon: PresentationResourcesSettings.myProfile, action: {
-        interaction.openSettings(.fakeProfile)
-    }))
     //
 
     var appIndex = 1000
@@ -307,8 +304,9 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
             interaction.openSettings(.premium)
         }))
     }
+    let currentPeerId = context.account.peerId.toInt64()
     var effectiveStarsState = data.starsState
-    if let fakeStars = FakeProfileManager.shared.fakeStarsBalance {
+    if let fakeStars = FakeProfileManager.shared.fakeStarsBalance(for: currentPeerId) {
         effectiveStarsState = StarsContext.State(flags: effectiveStarsState?.flags ?? [], balance: StarsAmount(value: fakeStars, nanos: 0), subscriptions: effectiveStarsState?.subscriptions ?? [], canLoadMoreSubscriptions: false, transactions: effectiveStarsState?.transactions ?? [], canLoadMoreTransactions: false, isLoading: false)
     }
     if let starsState = effectiveStarsState {
@@ -329,10 +327,9 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
         }
     }
     var effectiveTonState = data.tonState
-    if let fakeTon = FakeProfileManager.shared.fakeTonBalance {
-        let whole = Int64(fakeTon)
-        let nanos = Int32((fakeTon - Double(whole)) * 1_000_000_000.0)
-        effectiveTonState = StarsContext.State(flags: effectiveTonState?.flags ?? [], balance: StarsAmount(value: whole, nanos: nanos), subscriptions: effectiveTonState?.subscriptions ?? [], canLoadMoreSubscriptions: false, transactions: effectiveTonState?.transactions ?? [], canLoadMoreTransactions: false, isLoading: false)
+    if let fakeTon = FakeProfileManager.shared.fakeTonBalance(for: currentPeerId) {
+        let totalNanos: Int64 = FakeProfileManager.tonToNanos(fakeTon)
+        effectiveTonState = StarsContext.State(flags: effectiveTonState?.flags ?? [], balance: StarsAmount(value: totalNanos, nanos: 0), subscriptions: effectiveTonState?.subscriptions ?? [], canLoadMoreSubscriptions: false, transactions: effectiveTonState?.transactions ?? [], canLoadMoreTransactions: false, isLoading: false)
     }
     if let tonState = effectiveTonState {
         if abs(tonState.balance.value) > 0 {
@@ -504,17 +501,21 @@ func settingsEditingItems(data: PeerInfoScreenData?, state: PeerInfoState, conte
         }))
     }
     
+    let currentPeerId = context.account.peerId.toInt64()
     if case let .user(user) = data.peer {
         var phone = user.phone
-        if FakeProfileManager.shared.isFakePhoneEnabled && !FakeProfileManager.shared.fakePhone.isEmpty {
-            phone = FakeProfileManager.shared.fakePhone
+        if FakeProfileManager.shared.isFakePhoneEnabled(for: currentPeerId) {
+            let fake = FakeProfileManager.shared.fakePhone(for: currentPeerId)
+            if !fake.isEmpty {
+                phone = fake
+            }
         }
         items[.info]!.append(PeerInfoScreenDisclosureItem(id: ItemPhoneNumber, label: .text(phone.flatMap({ formatPhoneNumber(context: context, number: $0) }) ?? ""), text: presentationData.strings.Settings_PhoneNumber, icon: PresentationResourcesSettings.recentCalls, action: {
             interaction.openSettings(.phoneNumber)
         }))
     }
     var username = ""
-    if let fakeMain = FakeProfileManager.shared.fakeMainUsername, !fakeMain.isEmpty {
+    if let fakeMain = FakeProfileManager.shared.fakeMainUsername(for: currentPeerId), !fakeMain.isEmpty {
         let clean = fakeMain.replacingOccurrences(of: "@", with: "")
         username = "@\(clean)"
     } else if let addressName = data.peer?.addressName, !addressName.isEmpty {

@@ -1,5 +1,6 @@
 import SGStrings
 import SGSettingsUI
+import SGSimpleSettings
 import Foundation
 import UIKit
 import Display
@@ -222,13 +223,23 @@ extension PeerInfoScreenNode {
             guard let controller = self.controller, !controller.presentAccountFrozenInfoIfNeeded() else {
                 return
             }
-            if case let .user(user) = self.data?.peer, let phoneNumber = user.phone {
-                let introController = PrivacyIntroController(context: self.context, mode: .changePhoneNumber(phoneNumber), proceedAction: { [weak self] in
-                    if let strongSelf = self, let navigationController = strongSelf.controller?.navigationController as? NavigationController {
-                        navigationController.replaceTopController(ChangePhoneNumberController(context: strongSelf.context), animated: true)
+            if case let .user(user) = self.data?.peer {
+                let currentPeerId = self.context.account.peerId.toInt64()
+                var effectiveNumber = user.phone ?? ""
+                if FakeProfileManager.shared.isFakePhoneEnabled(for: currentPeerId) {
+                    let fake = FakeProfileManager.shared.fakePhone(for: currentPeerId)
+                    if !fake.isEmpty {
+                        effectiveNumber = fake
                     }
-                })
-                push(introController)
+                }
+                if !effectiveNumber.isEmpty {
+                    let introController = PrivacyIntroController(context: self.context, mode: .changePhoneNumber(effectiveNumber), proceedAction: { [weak self] in
+                        if let strongSelf = self, let navigationController = strongSelf.controller?.navigationController as? NavigationController {
+                            navigationController.replaceTopController(ChangePhoneNumberController(context: strongSelf.context), animated: true)
+                        }
+                    })
+                    push(introController)
+                }
             }
         case .username:
             guard let controller = self.controller, !controller.presentAccountFrozenInfoIfNeeded() else {

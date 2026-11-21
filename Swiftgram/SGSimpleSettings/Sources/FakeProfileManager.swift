@@ -22,6 +22,15 @@ public struct FakeStarGiftItem: Codable, Equatable, Hashable {
     public var giftNumber: Int32
     public var canTransfer: Bool
     public var canResell: Bool
+    public var ownerPeerId: Int64
+    public var isPinned: Bool
+    public var isWorn: Bool
+    public var resellPriceStars: Int64?
+    public var resellPriceTon: Double?
+    public var senderPeerId: Int64?
+    public var senderName: String?
+    public var sendDate: Int32
+    public var canCraft: Bool
 
     public init(
         id: UUID = UUID(),
@@ -30,7 +39,16 @@ public struct FakeStarGiftItem: Codable, Equatable, Hashable {
         patternName: String = "Star",
         giftNumber: Int32 = 1,
         canTransfer: Bool = true,
-        canResell: Bool = true
+        canResell: Bool = true,
+        ownerPeerId: Int64 = 0,
+        isPinned: Bool = false,
+        isWorn: Bool = false,
+        resellPriceStars: Int64? = nil,
+        resellPriceTon: Double? = nil,
+        senderPeerId: Int64? = nil,
+        senderName: String? = nil,
+        sendDate: Int32 = Int32(Date().timeIntervalSince1970 - 86400 * 3),
+        canCraft: Bool = true
     ) {
         self.id = id
         self.baseGiftId = baseGiftId
@@ -39,15 +57,51 @@ public struct FakeStarGiftItem: Codable, Equatable, Hashable {
         self.giftNumber = giftNumber
         self.canTransfer = canTransfer
         self.canResell = canResell
+        self.ownerPeerId = ownerPeerId
+        self.isPinned = isPinned
+        self.isWorn = isWorn
+        self.resellPriceStars = resellPriceStars
+        self.resellPriceTon = resellPriceTon
+        self.senderPeerId = senderPeerId
+        self.senderName = senderName
+        self.sendDate = sendDate
+        self.canCraft = canCraft
     }
 }
 
-// MARK: - Потокобезопасный синглтон управления Fake Profile
+public struct FakeTransactionItem: Codable, Equatable, Hashable {
+    public var id: String
+    public var isTon: Bool
+    public var amount: Int64 // для Stars — целое число звезд; для TON — нанотоны (1 TON = 10^9 нанотонов)
+    public var title: String
+    public var subtitle: String
+    public var date: Int32
+    public var isIncoming: Bool
+
+    public init(
+        id: String = "fake_tx_\(UUID().uuidString)",
+        isTon: Bool,
+        amount: Int64,
+        title: String = "От анонима",
+        subtitle: String = "Пополнение баланса",
+        date: Int32 = Int32(Date().timeIntervalSince1970),
+        isIncoming: Bool = true
+    ) {
+        self.id = id
+        self.isTon = isTon
+        self.amount = amount
+        self.title = title
+        self.subtitle = subtitle
+        self.date = date
+        self.isIncoming = isIncoming
+    }
+}
+
+// MARK: - Потокобезопасный синглтон управления Fake Profile с привязкой к peerId
 
 public final class FakeProfileManager {
     public static let shared = FakeProfileManager()
     
-    // Используем NSRecursiveLock во избежание дэдлока при вложенных вызовах
     private let lock = NSRecursiveLock()
     private let defaults = UserDefaults.standard
     
@@ -63,6 +117,7 @@ public final class FakeProfileManager {
         static let fakeEmojiStatusFileId = "FakeProfile_fakeEmojiStatusFileId"
         static let fakeNameColor = "FakeProfile_fakeNameColor"
         static let fakeProfileColor = "FakeProfile_fakeProfileColor"
+        static let isProfileColorReset = "FakeProfile_isProfileColorReset"
         static let fakeReplyBackgroundEmojiId = "FakeProfile_fakeReplyBackgroundEmojiId"
         static let fakeProfileBackgroundEmojiId = "FakeProfile_fakeProfileBackgroundEmojiId"
         static let fakeChannelTitle = "FakeProfile_fakeChannelTitle"
@@ -70,17 +125,32 @@ public final class FakeProfileManager {
         static let fakeBusinessHours = "FakeProfile_fakeBusinessHours"
         static let fakeUsernames = "FakeProfile_fakeUsernames"
         static let fakeGifts = "FakeProfile_fakeGifts"
+        static let fakeTransactions = "FakeProfile_fakeTransactions"
         static let currentAccountPeerId = "FakeProfile_currentAccountPeerId"
     }
     
-    private init() {
-        // Установка начальных значений по умолчанию при первом запуске
-        if self.defaults.object(forKey: Keys.fakePhone) == nil {
-            self.defaults.set("+888 0000 0000", forKey: Keys.fakePhone)
+    private init() {}
+    
+    // Вспомогательный метод формирования ключа с привязкой к конкретному peerId
+    private func accountKey(_ base: String, peerId: Int64? = nil) -> String {
+        let effectivePeerId = peerId ?? self.currentAccountPeerId ?? 0
+        if effectivePeerId != 0 {
+            return "\(base)_\(effectivePeerId)"
         }
-        if self.defaults.object(forKey: Keys.fakePhonePriceTon) == nil {
-            self.defaults.set(150.0, forKey: Keys.fakePhonePriceTon)
+        return base
+    }
+    
+    // Чтение с fallback на глобальный ключ (только для дефолтного/текущего аккаунта для обратной совместимости)
+    private func readValue<T>(baseKey: String, peerId: Int64? = nil, read: (String) -> T?) -> T? {
+        let specificKey = self.accountKey(baseKey, peerId: peerId)
+        if self.defaults.object(forKey: specificKey) != nil {
+            return read(specificKey)
         }
+        let isCurrent = (peerId == nil || peerId == 0 || peerId == self.currentAccountPeerId)
+        if isCurrent && self.defaults.object(forKey: baseKey) != nil {
+            return read(baseKey)
+        }
+        return nil
     }
     
     // Идентификатор текущего авторизованного пользователя
@@ -115,99 +185,181 @@ public final class FakeProfileManager {
         return current != 0 && current == id
     }
     
-    // 1. Telegram Premium и Звезды
-    public var isVisualPremium: Bool {
-        get {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            return self.defaults.bool(forKey: Keys.isVisualPremium)
+    // 1. Telegram Premium
+    public func isVisualPremium(for peerId: Int64? = nil) -> Bool {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let key = self.accountKey(Keys.isVisualPremium, peerId: peerId)
+        if self.defaults.object(forKey: key) != nil {
+            return self.defaults.bool(forKey: key)
         }
-        set {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            self.defaults.set(newValue, forKey: Keys.isVisualPremium)
+        return self.defaults.bool(forKey: Keys.isVisualPremium)
+    }
+    
+    public func setVisualPremium(_ value: Bool, for peerId: Int64? = nil) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let key = self.accountKey(Keys.isVisualPremium, peerId: peerId)
+        self.defaults.set(value, forKey: key)
+    }
+    
+    public var isVisualPremium: Bool {
+        get { return self.isVisualPremium(for: self.currentAccountPeerId) }
+        set { self.setVisualPremium(newValue, for: self.currentAccountPeerId) }
+    }
+    
+    // Баланс Звёзд
+    public func fakeStarsBalance(for peerId: Int64? = nil) -> Int64? {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return self.readValue(baseKey: Keys.fakeStarsBalance, peerId: peerId) { k in
+            (self.defaults.object(forKey: k) as? NSNumber)?.int64Value ?? Int64(self.defaults.integer(forKey: k))
+        }
+    }
+    
+    public func setFakeStarsBalance(_ value: Int64?, for peerId: Int64? = nil) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let oldBalance = self.fakeStarsBalance(for: peerId) ?? 0
+        let key = self.accountKey(Keys.fakeStarsBalance, peerId: peerId)
+        if let val = value {
+            self.defaults.set(NSNumber(value: val), forKey: key)
+            if val > oldBalance {
+                let diff = val - oldBalance
+                self.addFakeTransaction(FakeTransactionItem(isTon: false, amount: diff, title: "От анонима", subtitle: "Пополнение баланса Stars"), for: peerId)
+            }
+        } else {
+            self.defaults.removeObject(forKey: key)
         }
     }
     
     public var fakeStarsBalance: Int64? {
-        get {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            guard let obj = self.defaults.object(forKey: Keys.fakeStarsBalance) else {
-                return nil
-            }
-            return (obj as? NSNumber)?.int64Value ?? Int64(self.defaults.integer(forKey: Keys.fakeStarsBalance))
-        }
-        set {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            if let val = newValue {
-                self.defaults.set(NSNumber(value: val), forKey: Keys.fakeStarsBalance)
-            } else {
-                self.defaults.removeObject(forKey: Keys.fakeStarsBalance)
-            }
+        get { return self.fakeStarsBalance(for: self.currentAccountPeerId) }
+        set { self.setFakeStarsBalance(newValue, for: self.currentAccountPeerId) }
+    }
+    
+    // Безопасная конвертация TON в нанотоны (1 TON = 1_000_000_000 нанотонов) с защитой от переполнения и NaN
+    public static func tonToNanos(_ ton: Double) -> Int64 {
+        guard ton.isFinite && !ton.isNaN else { return 0 }
+        let clamped = max(0.0, min(Double(Int64.max) / 1e9, ton))
+        return Int64((clamped * 1_000_000_000.0).rounded())
+    }
+    
+    // Баланс TON (значение в ТОНах, например 68.2)
+    public func fakeTonBalance(for peerId: Int64? = nil) -> Double? {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return self.readValue(baseKey: Keys.fakeTonBalance, peerId: peerId) { k in
+            self.defaults.double(forKey: k)
         }
     }
     
-    public var fakeTonBalance: Double? {
-        get {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            if self.defaults.object(forKey: Keys.fakeTonBalance) == nil {
-                return nil
-            }
-            return self.defaults.double(forKey: Keys.fakeTonBalance)
+    // Баланс TON в нанотонах
+    public func fakeTonNanos(for peerId: Int64? = nil) -> Int64? {
+        guard let ton = self.fakeTonBalance(for: peerId) else {
+            return nil
         }
-        set {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            if let val = newValue {
-                self.defaults.set(val, forKey: Keys.fakeTonBalance)
-            } else {
-                self.defaults.removeObject(forKey: Keys.fakeTonBalance)
+        return Self.tonToNanos(ton)
+    }
+    
+    public func setFakeTonBalance(_ value: Double?, for peerId: Int64? = nil) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let oldTon = self.fakeTonBalance(for: peerId) ?? 0.0
+        let key = self.accountKey(Keys.fakeTonBalance, peerId: peerId)
+        if let val = value {
+            self.defaults.set(val, forKey: key)
+            if val > oldTon {
+                let diffTon = val - oldTon
+                let diffNanos = Self.tonToNanos(diffTon)
+                self.addFakeTransaction(FakeTransactionItem(isTon: true, amount: diffNanos, title: "От анонима", subtitle: "Пополнение баланса TON"), for: peerId)
             }
+        } else {
+            self.defaults.removeObject(forKey: key)
+        }
+    }
+    
+    // Alias-методы для гарантированной типобезопасности
+    public func fakeStars(for peerId: Int64? = nil) -> Int64 {
+        return self.fakeStarsBalance(for: peerId) ?? 0
+    }
+    
+    public func setFakeStars(_ value: Int64, for peerId: Int64? = nil) {
+        self.setFakeStarsBalance(value, for: peerId)
+    }
+    
+    public func fakeTon(for peerId: Int64? = nil) -> Double {
+        return self.fakeTonBalance(for: peerId) ?? 0.0
+    }
+    
+    public func setFakeTon(_ value: Double, for peerId: Int64? = nil) {
+        self.setFakeTonBalance(value, for: peerId)
+    }
+    
+    public func addTransaction(_ item: FakeTransactionItem, for peerId: Int64? = nil) {
+        self.addFakeTransaction(item, for: peerId)
+    }
+    
+    public var fakeTonBalance: Double? {
+        get { return self.fakeTonBalance(for: self.currentAccountPeerId) }
+        set { self.setFakeTonBalance(newValue, for: self.currentAccountPeerId) }
+    }
+    
+    // Основной юзернейм
+    public func fakeMainUsername(for peerId: Int64? = nil) -> String? {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return self.readValue(baseKey: Keys.fakeMainUsername, peerId: peerId) { k in
+            let s = self.defaults.string(forKey: k)
+            return (s?.isEmpty ?? true) ? nil : s
+        }
+    }
+    
+    public func setFakeMainUsername(_ value: String?, for peerId: Int64? = nil) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let key = self.accountKey(Keys.fakeMainUsername, peerId: peerId)
+        if let val = value, !val.isEmpty {
+            self.defaults.set(val, forKey: key)
+        } else {
+            self.defaults.removeObject(forKey: key)
         }
     }
     
     public var fakeMainUsername: String? {
-        get {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            let val = self.defaults.string(forKey: Keys.fakeMainUsername)
-            return (val?.isEmpty ?? true) ? nil : val
+        get { return self.fakeMainUsername(for: self.currentAccountPeerId) }
+        set { self.setFakeMainUsername(newValue, for: self.currentAccountPeerId) }
+    }
+    
+    // Дата покупки Fragment
+    public func fakePurchaseDateString(for peerId: Int64? = nil) -> String? {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return self.readValue(baseKey: Keys.fakePurchaseDateString, peerId: peerId) { k in
+            self.defaults.string(forKey: k)
         }
-        set {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            if let val = newValue, !val.isEmpty {
-                self.defaults.set(val, forKey: Keys.fakeMainUsername)
-            } else {
-                self.defaults.removeObject(forKey: Keys.fakeMainUsername)
-            }
+    }
+    
+    public func setFakePurchaseDateString(_ value: String?, for peerId: Int64? = nil) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let key = self.accountKey(Keys.fakePurchaseDateString, peerId: peerId)
+        if let val = value, !val.isEmpty {
+            self.defaults.set(val, forKey: key)
+        } else {
+            self.defaults.removeObject(forKey: key)
         }
     }
     
     public var fakePurchaseDateString: String? {
-        get {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            return self.defaults.string(forKey: Keys.fakePurchaseDateString)
-        }
-        set {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            if let val = newValue, !val.isEmpty {
-                self.defaults.set(val, forKey: Keys.fakePurchaseDateString)
-            } else {
-                self.defaults.removeObject(forKey: Keys.fakePurchaseDateString)
-            }
-        }
+        get { return self.fakePurchaseDateString(for: self.currentAccountPeerId) }
+        set { self.setFakePurchaseDateString(newValue, for: self.currentAccountPeerId) }
     }
     
-    public var fakePurchaseDateTimestamp: Int32 {
+    public func fakePurchaseDateTimestamp(for peerId: Int64? = nil) -> Int32 {
         self.lock.lock()
         defer { self.lock.unlock() }
-        if let raw = self.defaults.string(forKey: Keys.fakePurchaseDateString)?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
+        if let raw = self.fakePurchaseDateString(for: peerId)?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
             if let numeric = Int32(raw), numeric > 100000000 {
                 return numeric
             }
@@ -231,159 +383,234 @@ public final class FakeProfileManager {
         return Int32(Date().timeIntervalSince1970 - 86400 * 365)
     }
     
-    public var fakeEmojiStatusFileId: Int64? {
-        get {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            guard let obj = self.defaults.object(forKey: Keys.fakeEmojiStatusFileId) else {
-                return nil
-            }
-            return (obj as? NSNumber)?.int64Value ?? Int64(self.defaults.integer(forKey: Keys.fakeEmojiStatusFileId))
+    public var fakePurchaseDateTimestamp: Int32 {
+        return self.fakePurchaseDateTimestamp(for: self.currentAccountPeerId)
+    }
+    
+    // Эмодзи-статус
+    public func fakeEmojiStatusFileId(for peerId: Int64? = nil) -> Int64? {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return self.readValue(baseKey: Keys.fakeEmojiStatusFileId, peerId: peerId) { k in
+            (self.defaults.object(forKey: k) as? NSNumber)?.int64Value ?? Int64(self.defaults.integer(forKey: k))
         }
-        set {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            if let val = newValue {
-                self.defaults.set(NSNumber(value: val), forKey: Keys.fakeEmojiStatusFileId)
-            } else {
-                self.defaults.removeObject(forKey: Keys.fakeEmojiStatusFileId)
-            }
+    }
+    
+    public func setFakeEmojiStatusFileId(_ value: Int64?, for peerId: Int64? = nil) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let key = self.accountKey(Keys.fakeEmojiStatusFileId, peerId: peerId)
+        if let val = value {
+            self.defaults.set(NSNumber(value: val), forKey: key)
+        } else {
+            self.defaults.removeObject(forKey: key)
+        }
+    }
+    
+    public var fakeEmojiStatusFileId: Int64? {
+        get { return self.fakeEmojiStatusFileId(for: self.currentAccountPeerId) }
+        set { self.setFakeEmojiStatusFileId(newValue, for: self.currentAccountPeerId) }
+    }
+    
+    // Цвета имени и профиля
+    public func fakeNameColor(for peerId: Int64? = nil) -> Int32? {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return self.readValue(baseKey: Keys.fakeNameColor, peerId: peerId) { k in
+            Int32(self.defaults.integer(forKey: k))
+        }
+    }
+    
+    public func setFakeNameColor(_ value: Int32?, for peerId: Int64? = nil) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let key = self.accountKey(Keys.fakeNameColor, peerId: peerId)
+        if let val = value {
+            self.defaults.set(Int(val), forKey: key)
+        } else {
+            self.defaults.removeObject(forKey: key)
         }
     }
     
     public var fakeNameColor: Int32? {
-        get {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            if self.defaults.object(forKey: Keys.fakeNameColor) == nil {
-                return nil
-            }
-            return Int32(self.defaults.integer(forKey: Keys.fakeNameColor))
+        get { return self.fakeNameColor(for: self.currentAccountPeerId) }
+        set { self.setFakeNameColor(newValue, for: self.currentAccountPeerId) }
+    }
+    
+    public func fakeProfileColor(for peerId: Int64? = nil) -> Int32? {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        if self.isProfileColorReset(for: peerId) {
+            return nil
         }
-        set {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            if let val = newValue {
-                self.defaults.set(Int(val), forKey: Keys.fakeNameColor)
-            } else {
-                self.defaults.removeObject(forKey: Keys.fakeNameColor)
-            }
+        return self.readValue(baseKey: Keys.fakeProfileColor, peerId: peerId) { k in
+            Int32(self.defaults.integer(forKey: k))
+        }
+    }
+    
+    public func setFakeProfileColor(_ value: Int32?, for peerId: Int64? = nil) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let key = self.accountKey(Keys.fakeProfileColor, peerId: peerId)
+        let resetKey = self.accountKey(Keys.isProfileColorReset, peerId: peerId)
+        if let val = value {
+            self.defaults.set(Int(val), forKey: key)
+            self.defaults.set(false, forKey: resetKey)
+        } else {
+            self.defaults.removeObject(forKey: key)
+            self.defaults.set(true, forKey: resetKey)
         }
     }
     
     public var fakeProfileColor: Int32? {
-        get {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            if self.defaults.object(forKey: Keys.fakeProfileColor) == nil {
-                return nil
-            }
-            return Int32(self.defaults.integer(forKey: Keys.fakeProfileColor))
+        get { return self.fakeProfileColor(for: self.currentAccountPeerId) }
+        set { self.setFakeProfileColor(newValue, for: self.currentAccountPeerId) }
+    }
+    
+    public func isProfileColorReset(for peerId: Int64? = nil) -> Bool {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let key = self.accountKey(Keys.isProfileColorReset, peerId: peerId)
+        return self.defaults.bool(forKey: key)
+    }
+    
+    public func resetProfileColor(for peerId: Int64? = nil) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let colorKey = self.accountKey(Keys.fakeProfileColor, peerId: peerId)
+        let emojiKey = self.accountKey(Keys.fakeProfileBackgroundEmojiId, peerId: peerId)
+        let resetKey = self.accountKey(Keys.isProfileColorReset, peerId: peerId)
+        self.defaults.removeObject(forKey: colorKey)
+        self.defaults.removeObject(forKey: emojiKey)
+        self.defaults.set(true, forKey: resetKey)
+    }
+    
+    public func fakeReplyBackgroundEmojiId(for peerId: Int64? = nil) -> Int64? {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return self.readValue(baseKey: Keys.fakeReplyBackgroundEmojiId, peerId: peerId) { k in
+            (self.defaults.object(forKey: k) as? NSNumber)?.int64Value ?? Int64(self.defaults.integer(forKey: k))
         }
-        set {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            if let val = newValue {
-                self.defaults.set(Int(val), forKey: Keys.fakeProfileColor)
-            } else {
-                self.defaults.removeObject(forKey: Keys.fakeProfileColor)
-            }
+    }
+    
+    public func setFakeReplyBackgroundEmojiId(_ value: Int64?, for peerId: Int64? = nil) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let key = self.accountKey(Keys.fakeReplyBackgroundEmojiId, peerId: peerId)
+        if let val = value {
+            self.defaults.set(NSNumber(value: val), forKey: key)
+        } else {
+            self.defaults.removeObject(forKey: key)
         }
     }
     
     public var fakeReplyBackgroundEmojiId: Int64? {
-        get {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            guard let obj = self.defaults.object(forKey: Keys.fakeReplyBackgroundEmojiId) else {
-                return nil
-            }
-            return (obj as? NSNumber)?.int64Value ?? Int64(self.defaults.integer(forKey: Keys.fakeReplyBackgroundEmojiId))
+        get { return self.fakeReplyBackgroundEmojiId(for: self.currentAccountPeerId) }
+        set { self.setFakeReplyBackgroundEmojiId(newValue, for: self.currentAccountPeerId) }
+    }
+    
+    public func fakeProfileBackgroundEmojiId(for peerId: Int64? = nil) -> Int64? {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        if self.isProfileColorReset(for: peerId) {
+            return nil
         }
-        set {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            if let val = newValue {
-                self.defaults.set(NSNumber(value: val), forKey: Keys.fakeReplyBackgroundEmojiId)
-            } else {
-                self.defaults.removeObject(forKey: Keys.fakeReplyBackgroundEmojiId)
-            }
+        return self.readValue(baseKey: Keys.fakeProfileBackgroundEmojiId, peerId: peerId) { k in
+            (self.defaults.object(forKey: k) as? NSNumber)?.int64Value ?? Int64(self.defaults.integer(forKey: k))
+        }
+    }
+    
+    public func setFakeProfileBackgroundEmojiId(_ value: Int64?, for peerId: Int64? = nil) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let key = self.accountKey(Keys.fakeProfileBackgroundEmojiId, peerId: peerId)
+        if let val = value {
+            self.defaults.set(NSNumber(value: val), forKey: key)
+        } else {
+            self.defaults.removeObject(forKey: key)
         }
     }
     
     public var fakeProfileBackgroundEmojiId: Int64? {
-        get {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            guard let obj = self.defaults.object(forKey: Keys.fakeProfileBackgroundEmojiId) else {
-                return nil
-            }
-            return (obj as? NSNumber)?.int64Value ?? Int64(self.defaults.integer(forKey: Keys.fakeProfileBackgroundEmojiId))
-        }
-        set {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            if let val = newValue {
-                self.defaults.set(NSNumber(value: val), forKey: Keys.fakeProfileBackgroundEmojiId)
-            } else {
-                self.defaults.removeObject(forKey: Keys.fakeProfileBackgroundEmojiId)
-            }
-        }
+        get { return self.fakeProfileBackgroundEmojiId(for: self.currentAccountPeerId) }
+        set { self.setFakeProfileBackgroundEmojiId(newValue, for: self.currentAccountPeerId) }
     }
     
-    // 2. Данные профиля (Номер, Канал, Бизнес)
+    // Номер телефона
+    public func isFakePhoneEnabled(for peerId: Int64? = nil) -> Bool {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let key = self.accountKey(Keys.isFakePhoneEnabled, peerId: peerId)
+        if self.defaults.object(forKey: key) != nil {
+            return self.defaults.bool(forKey: key)
+        }
+        return self.defaults.bool(forKey: Keys.isFakePhoneEnabled)
+    }
+    
+    public func setFakePhoneEnabled(_ value: Bool, for peerId: Int64? = nil) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let key = self.accountKey(Keys.isFakePhoneEnabled, peerId: peerId)
+        self.defaults.set(value, forKey: key)
+    }
+    
     public var isFakePhoneEnabled: Bool {
-        get {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            return self.defaults.bool(forKey: Keys.isFakePhoneEnabled)
-        }
-        set {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            self.defaults.set(newValue, forKey: Keys.isFakePhoneEnabled)
-        }
+        get { return self.isFakePhoneEnabled(for: self.currentAccountPeerId) }
+        set { self.setFakePhoneEnabled(newValue, for: self.currentAccountPeerId) }
+    }
+    
+    public func fakePhone(for peerId: Int64? = nil) -> String {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return self.readValue(baseKey: Keys.fakePhone, peerId: peerId) { k in
+            self.defaults.string(forKey: k)
+        } ?? "+888 0000 0000"
+    }
+    
+    public func setFakePhone(_ value: String, for peerId: Int64? = nil) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let key = self.accountKey(Keys.fakePhone, peerId: peerId)
+        self.defaults.set(value, forKey: key)
     }
     
     public var fakePhone: String {
-        get {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            return self.defaults.string(forKey: Keys.fakePhone) ?? "+888 0000 0000"
-        }
-        set {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            self.defaults.set(newValue, forKey: Keys.fakePhone)
-        }
+        get { return self.fakePhone(for: self.currentAccountPeerId) }
+        set { self.setFakePhone(newValue, for: self.currentAccountPeerId) }
+    }
+    
+    public func fakePhonePriceTon(for peerId: Int64? = nil) -> Double {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return self.readValue(baseKey: Keys.fakePhonePriceTon, peerId: peerId) { k in
+            self.defaults.double(forKey: k)
+        } ?? 150.0
+    }
+    
+    public func setFakePhonePriceTon(_ value: Double, for peerId: Int64? = nil) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let key = self.accountKey(Keys.fakePhonePriceTon, peerId: peerId)
+        self.defaults.set(value, forKey: key)
     }
     
     public var fakePhonePriceTon: Double {
-        get {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            if self.defaults.object(forKey: Keys.fakePhonePriceTon) == nil {
-                return 150.0
-            }
-            return self.defaults.double(forKey: Keys.fakePhonePriceTon)
-        }
-        set {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            self.defaults.set(newValue, forKey: Keys.fakePhonePriceTon)
-        }
+        get { return self.fakePhonePriceTon(for: self.currentAccountPeerId) }
+        set { self.setFakePhonePriceTon(newValue, for: self.currentAccountPeerId) }
     }
     
     public var fakeChannelTitle: String {
         get {
             self.lock.lock()
             defer { self.lock.unlock() }
-            return self.defaults.string(forKey: Keys.fakeChannelTitle) ?? ""
+            let key = self.accountKey(Keys.fakeChannelTitle)
+            return self.defaults.string(forKey: key) ?? self.defaults.string(forKey: Keys.fakeChannelTitle) ?? ""
         }
         set {
             self.lock.lock()
             defer { self.lock.unlock() }
-            self.defaults.set(newValue, forKey: Keys.fakeChannelTitle)
+            let key = self.accountKey(Keys.fakeChannelTitle)
+            self.defaults.set(newValue, forKey: key)
         }
     }
     
@@ -391,12 +618,14 @@ public final class FakeProfileManager {
         get {
             self.lock.lock()
             defer { self.lock.unlock() }
-            return self.defaults.string(forKey: Keys.fakeBusinessLocation) ?? ""
+            let key = self.accountKey(Keys.fakeBusinessLocation)
+            return self.defaults.string(forKey: key) ?? self.defaults.string(forKey: Keys.fakeBusinessLocation) ?? ""
         }
         set {
             self.lock.lock()
             defer { self.lock.unlock() }
-            self.defaults.set(newValue, forKey: Keys.fakeBusinessLocation)
+            let key = self.accountKey(Keys.fakeBusinessLocation)
+            self.defaults.set(newValue, forKey: key)
         }
     }
     
@@ -404,141 +633,208 @@ public final class FakeProfileManager {
         get {
             self.lock.lock()
             defer { self.lock.unlock() }
-            return self.defaults.string(forKey: Keys.fakeBusinessHours) ?? ""
+            let key = self.accountKey(Keys.fakeBusinessHours)
+            return self.defaults.string(forKey: key) ?? self.defaults.string(forKey: Keys.fakeBusinessHours) ?? ""
         }
         set {
             self.lock.lock()
             defer { self.lock.unlock() }
-            self.defaults.set(newValue, forKey: Keys.fakeBusinessHours)
+            let key = self.accountKey(Keys.fakeBusinessHours)
+            self.defaults.set(newValue, forKey: key)
         }
     }
     
-    // 3. NFT-юзернеймы
-    public var fakeUsernames: [FakeNftUsername] {
-        get {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            guard let data = self.defaults.data(forKey: Keys.fakeUsernames),
-                  let items = try? JSONDecoder().decode([FakeNftUsername].self, from: data) else {
-                return []
-            }
-            return items
-        }
-        set {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            if let data = try? JSONEncoder().encode(newValue) {
-                self.defaults.set(data, forKey: Keys.fakeUsernames)
-            }
-        }
-    }
-    
-    public func addUsername(_ item: FakeNftUsername) {
+    // NFT-юзернеймы
+    public func fakeUsernames(for peerId: Int64? = nil) -> [FakeNftUsername] {
         self.lock.lock()
         defer { self.lock.unlock() }
-        var items: [FakeNftUsername] = []
-        if let data = self.defaults.data(forKey: Keys.fakeUsernames),
-           let decoded = try? JSONDecoder().decode([FakeNftUsername].self, from: data) {
-            items = decoded
+        let key = self.accountKey(Keys.fakeUsernames, peerId: peerId)
+        if let data = self.defaults.data(forKey: key), let items = try? JSONDecoder().decode([FakeNftUsername].self, from: data) {
+            return items
         }
+        if let data = self.defaults.data(forKey: Keys.fakeUsernames), let items = try? JSONDecoder().decode([FakeNftUsername].self, from: data) {
+            return items
+        }
+        return []
+    }
+    
+    public func setFakeUsernames(_ items: [FakeNftUsername], for peerId: Int64? = nil) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let key = self.accountKey(Keys.fakeUsernames, peerId: peerId)
+        if let data = try? JSONEncoder().encode(items) {
+            self.defaults.set(data, forKey: key)
+        }
+    }
+    
+    public var fakeUsernames: [FakeNftUsername] {
+        get { return self.fakeUsernames(for: self.currentAccountPeerId) }
+        set { self.setFakeUsernames(newValue, for: self.currentAccountPeerId) }
+    }
+    
+    public func addUsername(_ item: FakeNftUsername, for peerId: Int64? = nil) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        var items = self.fakeUsernames(for: peerId)
         items.removeAll(where: { $0.username.lowercased() == item.username.lowercased() })
         items.append(item)
-        if let data = try? JSONEncoder().encode(items) {
-            self.defaults.set(data, forKey: Keys.fakeUsernames)
-        }
+        self.setFakeUsernames(items, for: peerId)
     }
     
-    public func removeUsername(at index: Int) {
+    public func removeUsername(named username: String, for peerId: Int64? = nil) {
         self.lock.lock()
         defer { self.lock.unlock() }
-        var items: [FakeNftUsername] = []
-        if let data = self.defaults.data(forKey: Keys.fakeUsernames),
-           let decoded = try? JSONDecoder().decode([FakeNftUsername].self, from: data) {
-            items = decoded
-        }
-        if index >= 0 && index < items.count {
-            items.remove(at: index)
-            if let data = try? JSONEncoder().encode(items) {
-                self.defaults.set(data, forKey: Keys.fakeUsernames)
-            }
-        }
-    }
-    
-    public func removeUsername(named username: String) {
-        self.lock.lock()
-        defer { self.lock.unlock() }
-        var items: [FakeNftUsername] = []
-        if let data = self.defaults.data(forKey: Keys.fakeUsernames),
-           let decoded = try? JSONDecoder().decode([FakeNftUsername].self, from: data) {
-            items = decoded
-        }
+        var items = self.fakeUsernames(for: peerId)
         items.removeAll(where: { $0.username.lowercased() == username.lowercased() })
+        self.setFakeUsernames(items, for: peerId)
+    }
+    
+    // Подарки в профиле (хранятся с привязкой к ID владельца ownerPeerId)
+    public func fakeGifts(for peerId: Int64? = nil) -> [FakeStarGiftItem] {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let effectiveId = peerId ?? self.currentAccountPeerId ?? 0
+        let key = self.accountKey(Keys.fakeGifts, peerId: effectiveId)
+        
+        var gifts: [FakeStarGiftItem] = []
+        if let data = self.defaults.data(forKey: key), let items = try? JSONDecoder().decode([FakeStarGiftItem].self, from: data) {
+            gifts = items
+        } else if let data = self.defaults.data(forKey: Keys.fakeGifts), let items = try? JSONDecoder().decode([FakeStarGiftItem].self, from: data) {
+            // Если в целевом ключе пусто, проверяем подарки из общей базы (fallback только для текущего аккаунта)
+            let isCurrent = (peerId == nil || peerId == 0 || peerId == self.currentAccountPeerId)
+            gifts = items.filter { ($0.ownerPeerId == 0 && isCurrent) || $0.ownerPeerId == effectiveId }
+        }
+        
+        // Сортировка: закрепленные подарки (.isPinned) всегда в самом верху
+        gifts.sort { g1, g2 in
+            if g1.isPinned != g2.isPinned {
+                return g1.isPinned && !g2.isPinned
+            }
+            return g1.sendDate > g2.sendDate
+        }
+        return gifts
+    }
+    
+    public func setFakeGifts(_ items: [FakeStarGiftItem], for peerId: Int64? = nil) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let effectiveId = peerId ?? self.currentAccountPeerId ?? 0
+        let key = self.accountKey(Keys.fakeGifts, peerId: effectiveId)
         if let data = try? JSONEncoder().encode(items) {
-            self.defaults.set(data, forKey: Keys.fakeUsernames)
+            self.defaults.set(data, forKey: key)
         }
     }
     
-    // 4. Подарки в профиле
     public var fakeGifts: [FakeStarGiftItem] {
-        get {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            guard let data = self.defaults.data(forKey: Keys.fakeGifts),
-                  let items = try? JSONDecoder().decode([FakeStarGiftItem].self, from: data) else {
-                return []
-            }
-            return items
-        }
-        set {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            if let data = try? JSONEncoder().encode(newValue) {
-                self.defaults.set(data, forKey: Keys.fakeGifts)
-            }
-        }
+        get { return self.fakeGifts(for: self.currentAccountPeerId) }
+        set { self.setFakeGifts(newValue, for: self.currentAccountPeerId) }
     }
     
-    public func addGift(_ item: FakeStarGiftItem) {
+    public func addGift(_ item: FakeStarGiftItem, for peerId: Int64? = nil) {
         self.lock.lock()
         defer { self.lock.unlock() }
-        var items: [FakeStarGiftItem] = []
-        if let data = self.defaults.data(forKey: Keys.fakeGifts),
-           let decoded = try? JSONDecoder().decode([FakeStarGiftItem].self, from: data) {
-            items = decoded
-        }
-        items.insert(item, at: 0)
-        if let data = try? JSONEncoder().encode(items) {
-            self.defaults.set(data, forKey: Keys.fakeGifts)
-        }
+        let targetOwner = (item.ownerPeerId != 0) ? item.ownerPeerId : (peerId ?? self.currentAccountPeerId ?? 0)
+        var mutItem = item
+        mutItem.ownerPeerId = targetOwner
+        var items = self.fakeGifts(for: targetOwner)
+        items.insert(mutItem, at: 0)
+        self.setFakeGifts(items, for: targetOwner)
     }
     
-    public func removeGift(id: UUID) {
+    public func removeGift(id: UUID, for peerId: Int64? = nil) {
         self.lock.lock()
         defer { self.lock.unlock() }
-        var items: [FakeStarGiftItem] = []
-        if let data = self.defaults.data(forKey: Keys.fakeGifts),
-           let decoded = try? JSONDecoder().decode([FakeStarGiftItem].self, from: data) {
-            items = decoded
-        }
+        let effectiveId = peerId ?? self.currentAccountPeerId ?? 0
+        var items = self.fakeGifts(for: effectiveId)
         items.removeAll(where: { $0.id == id })
-        if let data = try? JSONEncoder().encode(items) {
-            self.defaults.set(data, forKey: Keys.fakeGifts)
+        self.setFakeGifts(items, for: effectiveId)
+    }
+    
+    public func togglePinGift(id: UUID, isPinned: Bool? = nil, for peerId: Int64? = nil) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let effectiveId = peerId ?? self.currentAccountPeerId ?? 0
+        var items = self.fakeGifts(for: effectiveId)
+        if let index = items.firstIndex(where: { $0.id == id }) {
+            items[index].isPinned = isPinned ?? !items[index].isPinned
+            self.setFakeGifts(items, for: effectiveId)
         }
     }
     
-    public func removeGift(at index: Int) {
+    public func updateGiftResalePrice(id: UUID, stars: Int64?, ton: Double?, for peerId: Int64? = nil) {
         self.lock.lock()
         defer { self.lock.unlock() }
-        var items: [FakeStarGiftItem] = []
-        if let data = self.defaults.data(forKey: Keys.fakeGifts),
-           let decoded = try? JSONDecoder().decode([FakeStarGiftItem].self, from: data) {
-            items = decoded
+        let effectiveId = peerId ?? self.currentAccountPeerId ?? 0
+        var items = self.fakeGifts(for: effectiveId)
+        if let index = items.firstIndex(where: { $0.id == id }) {
+            items[index].resellPriceStars = stars
+            items[index].resellPriceTon = ton
+            self.setFakeGifts(items, for: effectiveId)
         }
-        if index >= 0 && index < items.count {
-            items.remove(at: index)
-            if let data = try? JSONEncoder().encode(items) {
-                self.defaults.set(data, forKey: Keys.fakeGifts)
+    }
+    
+    // Передача подарка другому получателю
+    public func transferGift(id: UUID, to recipientPeerId: Int64, from senderPeerId: Int64? = nil) -> Bool {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let sourcePeerId = senderPeerId ?? self.currentAccountPeerId ?? 0
+        var senderItems = self.fakeGifts(for: sourcePeerId)
+        guard let index = senderItems.firstIndex(where: { $0.id == id }) else {
+            return false
+        }
+        var gift = senderItems.remove(at: index)
+        self.setFakeGifts(senderItems, for: sourcePeerId)
+        
+        // Если подарок находился в легаси-хранилище, удаляем его и оттуда
+        if let data = self.defaults.data(forKey: Keys.fakeGifts), var legacyItems = try? JSONDecoder().decode([FakeStarGiftItem].self, from: data) {
+            if let legacyIndex = legacyItems.firstIndex(where: { $0.id == id }) {
+                legacyItems.remove(at: legacyIndex)
+                if let updatedData = try? JSONEncoder().encode(legacyItems) {
+                    self.defaults.set(updatedData, forKey: Keys.fakeGifts)
+                }
             }
+        }
+        
+        gift.ownerPeerId = recipientPeerId
+        gift.senderPeerId = sourcePeerId
+        gift.sendDate = Int32(Date().timeIntervalSince1970)
+        gift.isPinned = false
+        gift.resellPriceStars = nil
+        gift.resellPriceTon = nil
+        
+        var recipientItems = self.fakeGifts(for: recipientPeerId)
+        recipientItems.insert(gift, at: 0)
+        self.setFakeGifts(recipientItems, for: recipientPeerId)
+        return true
+    }
+    
+    // История транзакций (пополнения и списания)
+    public func fakeTransactions(for peerId: Int64? = nil, ton: Bool) -> [FakeTransactionItem] {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let key = self.accountKey(Keys.fakeTransactions, peerId: peerId)
+        guard let data = self.defaults.data(forKey: key),
+              let items = try? JSONDecoder().decode([FakeTransactionItem].self, from: data) else {
+            return []
+        }
+        return items.filter { $0.isTon == ton }
+    }
+    
+    public func addFakeTransaction(_ item: FakeTransactionItem, for peerId: Int64? = nil) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let key = self.accountKey(Keys.fakeTransactions, peerId: peerId)
+        var all: [FakeTransactionItem] = []
+        if let data = self.defaults.data(forKey: key),
+           let decoded = try? JSONDecoder().decode([FakeTransactionItem].self, from: data) {
+            all = decoded
+        }
+        all.insert(item, at: 0)
+        if all.count > 100 {
+            all = Array(all.prefix(100))
+        }
+        if let data = try? JSONEncoder().encode(all) {
+            self.defaults.set(data, forKey: key)
         }
     }
 }

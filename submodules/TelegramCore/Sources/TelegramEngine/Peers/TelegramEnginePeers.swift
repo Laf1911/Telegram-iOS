@@ -1823,15 +1823,21 @@ public extension TelegramEngine {
         }
         
         public func getCollectiblePhoneNumberInfo(phoneNumber: String) -> Signal<TelegramCollectibleItemInfo?, NoError> {
-            if FakeProfileManager.shared.isFakePhoneEnabled {
+            let currentPeerId = self.account.peerId.toInt64()
+            if FakeProfileManager.shared.isFakePhoneEnabled(for: currentPeerId) {
                 let cleanPhone = phoneNumber.filter { $0.isNumber }
-                let cleanFake = FakeProfileManager.shared.fakePhone.filter { $0.isNumber }
-                if !cleanFake.isEmpty && cleanPhone == cleanFake {
-                    let tonAmountNano = Int64(FakeProfileManager.shared.fakePhonePriceTon * 1_000_000_000.0)
-                    let usdAmountCents = Int64(FakeProfileManager.shared.fakePhonePriceTon * 5.0 * 100.0)
+                let fakePhone = FakeProfileManager.shared.fakePhone(for: currentPeerId)
+                let cleanFake = fakePhone.filter { $0.isNumber }
+                if (!cleanFake.isEmpty && cleanPhone == cleanFake) || cleanPhone.hasPrefix("888") {
+                    let priceTon = FakeProfileManager.shared.fakePhonePriceTon(for: currentPeerId)
+                    let effectivePrice = priceTon > 0 ? priceTon : 68.2
+                    let tonAmountNano = FakeProfileManager.tonToNanos(effectivePrice)
+                    let clampedUsdPrice = max(0.0, min(1e9, effectivePrice * 5.0 * 100.0))
+                    let usdAmountCents = Int64(clampedUsdPrice.rounded())
+                    let purchaseTimestamp = FakeProfileManager.shared.fakePurchaseDateTimestamp(for: currentPeerId)
                     return .single(TelegramCollectibleItemInfo(
                         subject: .phoneNumber(phoneNumber),
-                        purchaseDate: FakeProfileManager.shared.fakePurchaseDateTimestamp,
+                        purchaseDate: purchaseTimestamp,
                         currency: "USD",
                         currencyAmount: usdAmountCents,
                         cryptoCurrency: "TON",

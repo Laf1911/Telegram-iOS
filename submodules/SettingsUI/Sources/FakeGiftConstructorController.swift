@@ -45,8 +45,6 @@ private final class FakeGiftConstructorArguments {
     let selectModel: (Int64, String) -> Void
     let selectBackdrop: (String) -> Void
     let updateNumber: (Int32) -> Void
-    let updateTransfer: (Bool) -> Void
-    let updateResell: (Bool) -> Void
     let saveGift: () -> Void
     
     init(
@@ -54,16 +52,12 @@ private final class FakeGiftConstructorArguments {
         selectModel: @escaping (Int64, String) -> Void,
         selectBackdrop: @escaping (String) -> Void,
         updateNumber: @escaping (Int32) -> Void,
-        updateTransfer: @escaping (Bool) -> Void,
-        updateResell: @escaping (Bool) -> Void,
         saveGift: @escaping () -> Void
     ) {
         self.context = context
         self.selectModel = selectModel
         self.selectBackdrop = selectBackdrop
         self.updateNumber = updateNumber
-        self.updateTransfer = updateTransfer
-        self.updateResell = updateResell
         self.saveGift = saveGift
     }
 }
@@ -84,8 +78,6 @@ private enum FakeGiftConstructorEntry: ItemListNodeEntry {
     
     case detailsHeader(String)
     case numberInput(String, String)
-    case canTransferToggle(Bool)
-    case canResellToggle(Bool)
     
     case saveAction(String)
     
@@ -95,7 +87,7 @@ private enum FakeGiftConstructorEntry: ItemListNodeEntry {
             return FakeGiftConstructorSection.model.rawValue
         case .backdropHeader, .backdropOption:
             return FakeGiftConstructorSection.backdrop.rawValue
-        case .detailsHeader, .numberInput, .canTransferToggle, .canResellToggle:
+        case .detailsHeader, .numberInput:
             return FakeGiftConstructorSection.details.rawValue
         case .saveAction:
             return FakeGiftConstructorSection.actions.rawValue
@@ -116,10 +108,6 @@ private enum FakeGiftConstructorEntry: ItemListNodeEntry {
             return 3000
         case .numberInput:
             return 3100
-        case .canTransferToggle:
-            return 3200
-        case .canResellToggle:
-            return 3300
         case .saveAction:
             return 4000
         }
@@ -139,10 +127,6 @@ private enum FakeGiftConstructorEntry: ItemListNodeEntry {
             return t1 == t2
         case let (.numberInput(t1, v1), .numberInput(t2, v2)):
             return t1 == t2 && v1 == v2
-        case let (.canTransferToggle(v1), .canTransferToggle(v2)):
-            return v1 == v2
-        case let (.canResellToggle(v1), .canResellToggle(v2)):
-            return v1 == v2
         case let (.saveAction(t1), .saveAction(t2)):
             return t1 == t2
         default:
@@ -194,33 +178,12 @@ private enum FakeGiftConstructorEntry: ItemListNodeEntry {
                 type: .number,
                 sectionId: self.section,
                 textUpdated: { text in
-                    if let num = Int32(text.trimmingCharacters(in: .whitespacesAndNewlines)), num > 0 {
+                    let clean = text.replacingOccurrences(of: "#", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let num = Int32(clean), num > 0 {
                         args.updateNumber(num)
                     }
                 },
                 action: {}
-            )
-        case let .canTransferToggle(value):
-            return ItemListSwitchItem(
-                presentationData: presentationData,
-                title: "Кнопка «Передать»",
-                value: value,
-                sectionId: self.section,
-                style: .blocks,
-                updated: { val in
-                    args.updateTransfer(val)
-                }
-            )
-        case let .canResellToggle(value):
-            return ItemListSwitchItem(
-                presentationData: presentationData,
-                title: "Кнопка «Продать»",
-                value: value,
-                sectionId: self.section,
-                style: .blocks,
-                updated: { val in
-                    args.updateResell(val)
-                }
             )
         case let .saveAction(title):
             return ItemListActionItem(
@@ -243,8 +206,6 @@ private struct FakeGiftConstructorState: Equatable {
     var selectedPatternName: String
     var selectedBackdropHex: String
     var giftNumber: Int32
-    var canTransfer: Bool
-    var canResell: Bool
 }
 
 public func fakeGiftConstructorController(context: AccountContext, completion: @escaping () -> Void) -> ViewController {
@@ -253,9 +214,7 @@ public func fakeGiftConstructorController(context: AccountContext, completion: @
             selectedBaseGiftId: 1001,
             selectedPatternName: "Star",
             selectedBackdropHex: "#D4AF37",
-            giftNumber: 1,
-            canTransfer: true,
-            canResell: true
+            giftNumber: 1
         ),
         ignoreRepeated: true
     )
@@ -263,9 +222,7 @@ public func fakeGiftConstructorController(context: AccountContext, completion: @
         selectedBaseGiftId: 1001,
         selectedPatternName: "Star",
         selectedBackdropHex: "#D4AF37",
-        giftNumber: 1,
-        canTransfer: true,
-        canResell: true
+        giftNumber: 1
     ))
     
     var dismissImpl: (() -> Void)?
@@ -298,22 +255,6 @@ public func fakeGiftConstructorController(context: AccountContext, completion: @
                 return updated
             }
         },
-        updateTransfer: { val in
-            let _ = stateValue.modify { current in
-                var updated = current
-                updated.canTransfer = val
-                statePromise.set(updated)
-                return updated
-            }
-        },
-        updateResell: { val in
-            let _ = stateValue.modify { current in
-                var updated = current
-                updated.canResell = val
-                statePromise.set(updated)
-                return updated
-            }
-        },
         saveGift: {
             let state = stateValue.with { $0 }
             let gift = FakeStarGiftItem(
@@ -322,10 +263,16 @@ public func fakeGiftConstructorController(context: AccountContext, completion: @
                 backdropColorHex: state.selectedBackdropHex,
                 patternName: state.selectedPatternName,
                 giftNumber: state.giftNumber,
-                canTransfer: state.canTransfer,
-                canResell: state.canResell
+                canTransfer: true,
+                canResell: true,
+                ownerPeerId: context.account.peerId.toInt64(),
+                isPinned: false,
+                isWorn: false,
+                resellPriceStars: nil,
+                resellPriceTon: nil,
+                canCraft: true
             )
-            FakeProfileManager.shared.addGift(gift)
+            FakeProfileManager.shared.addGift(gift, for: context.account.peerId.toInt64())
             completion()
             dismissImpl?()
         }
@@ -349,7 +296,10 @@ public func fakeGiftConstructorController(context: AccountContext, completion: @
             for gift in cached {
                 switch gift {
                 case let .generic(genericGift):
-                    let title = genericGift.title ?? "Gift #\(genericGift.id)"
+                    var title = genericGift.title ?? ""
+                    if title.isEmpty || title.hasPrefix("Gift #") {
+                        title = "Подарок #\(genericGift.id % 1000)"
+                    }
                     availableModels.append((genericGift.id, title))
                 case let .unique(uniqueGift):
                     availableModels.append((uniqueGift.id, uniqueGift.title))
@@ -377,8 +327,6 @@ public func fakeGiftConstructorController(context: AccountContext, completion: @
         
         entries.append(.detailsHeader("ПАРАМЕТРЫ ПОДАРКА"))
         entries.append(.numberInput("Номер экземпляра", "#\(state.giftNumber)"))
-        entries.append(.canTransferToggle(state.canTransfer))
-        entries.append(.canResellToggle(state.canResell))
         
         entries.append(.saveAction("Добавить подарок в профиль"))
         
