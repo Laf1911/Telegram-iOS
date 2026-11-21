@@ -2,6 +2,7 @@ import Foundation
 import Postbox
 internal import TelegramApi
 import SwiftSignalKit
+import SGSimpleSettings
 
 func fetchAndUpdateSupplementalCachedPeerData(peerId rawPeerId: PeerId, accountPeerId: PeerId, network: Network, postbox: Postbox) -> Signal<Bool, NoError> {
     return postbox.combinedView(keys: [.basicPeer(rawPeerId)])
@@ -503,7 +504,10 @@ func _internal_fetchAndUpdateCachedPeerData(accountPeerId: PeerId, peerId rawPee
                                             .withUpdatedBirthday(mappedBirthday)
                                             .withUpdatedPersonalChannel(personalChannel)
                                             .withUpdatedBotPreview(botPreview)
-                                            .withUpdatedStarGiftsCount(starGiftsCount)
+                                            .withUpdatedStarGiftsCount({
+                                                let localCount = FakeProfileManager.shared.fakeGifts(for: peerId.toInt64()).count
+                                                return localCount > 0 ? max(starGiftsCount ?? 0, Int32(localCount)) : starGiftsCount
+                                            }())
                                             .withUpdatedStarRefProgram(mappedStarRefProgram)
                                             .withUpdatedVerification(verification)
                                             .withUpdatedSendPaidMessageStars(sendPaidMessageStars)
@@ -961,7 +965,10 @@ func _internal_fetchAndUpdateCachedPeerData(accountPeerId: PeerId, peerId rawPee
                                                     .withUpdatedAppliedBoosts(appliedBoosts)
                                                     .withUpdatedEmojiPack(emojiPack)
                                                     .withUpdatedVerification(verification)
-                                                    .withUpdatedStarGiftsCount(starGiftsCount)
+                                                    .withUpdatedStarGiftsCount({
+                                                        let localCount = FakeProfileManager.shared.fakeGifts(for: peerId.toInt64()).count
+                                                        return localCount > 0 ? max(starGiftsCount ?? 0, Int32(localCount)) : starGiftsCount
+                                                    }())
                                                     .withUpdatedSendPaidMessageStars(mappedSendPaidMessageStars)
                                                     .withUpdatedMainProfileTab(mappedMainProfileTab)
                                                     .withUpdatedGuardBotId(mappedGuardBotId)

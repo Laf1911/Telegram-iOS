@@ -723,10 +723,11 @@ final class UserAppearanceScreenComponent: Component {
             if self.isApplyingSettings {
                 return
             }
+            let isResettingProfileColor = (self.updatedPeerProfileColor == .some(nil))
             if resolvedState.changes.isEmpty {
                 self.environment?.controller()?.dismiss()
                 return
-            } else if !component.context.isPremium && !FakeProfileManager.shared.isVisualPremium {
+            } else if !component.context.isPremium && !FakeProfileManager.shared.isVisualPremium && !isResettingProfileColor {
                 HapticFeedback().impact(.light)
                 
                 let toastController = UndoOverlayController(
@@ -845,7 +846,7 @@ final class UserAppearanceScreenComponent: Component {
                     return
                 }
                 
-                if FakeProfileManager.shared.isVisualPremium {
+                if FakeProfileManager.shared.isVisualPremium || isResettingProfileColor {
                     self.isApplyingSettings = false
                     self.environment?.controller()?.dismiss()
                     return
@@ -1413,9 +1414,18 @@ final class UserAppearanceScreenComponent: Component {
                                 icon: nil,
                                 accessory: nil,
                                 action: { [weak self] view in
-                                    guard let self, let resolvedState = self.resolveState() else {
+                                    guard let self, let resolvedState = self.resolveState(), let component = self.component else {
                                         return
                                     }
+                                    let currentPeerId = component.context.account.peerId.toInt64()
+                                    FakeProfileManager.shared.resetProfileColor(for: currentPeerId)
+                                    let _ = component.context.account.postbox.transaction { transaction in
+                                        if let user = transaction.getPeer(component.context.account.peerId) as? TelegramUser {
+                                            transaction.updatePeer(component.context.account.peerId, update: { _ in
+                                                return user.withUpdatedProfileColor(nil).withUpdatedProfileBackgroundEmojiId(nil)
+                                            })
+                                        }
+                                    }.start()
                                     self.selectedProfileGift = nil
                                     self.updatedPeerProfileColor = .some(nil)
                                     self.updatedPeerProfileEmoji = .some(nil)

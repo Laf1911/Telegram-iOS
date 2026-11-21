@@ -340,13 +340,11 @@ extension PeerInfoScreenNode {
             }
             self.context.sharedContext.openExternalUrl(context: self.context, urlContext: .generic, url: url, forceExternal: !url.hasPrefix("tg://") && !url.contains("?start="), presentationData: self.context.sharedContext.currentPresentationData.with({$0}), navigationController: controller.navigationController as? NavigationController, dismissInput: {})
         case .stars:
-            if let starsContext = self.controller?.starsContext {
-                push(self.context.sharedContext.makeStarsTransactionsScreen(context: self.context, starsContext: starsContext))
-            }
+            let starsContext = self.controller?.starsContext ?? self.context.engine.payments.peerStarsContext()
+            push(self.context.sharedContext.makeStarsTransactionsScreen(context: self.context, starsContext: starsContext))
         case .ton:
-            if let tonContext = self.controller?.tonContext {
-                push(self.context.sharedContext.makeStarsTransactionsScreen(context: self.context, starsContext: tonContext))
-            }
+            let tonContext = self.controller?.tonContext ?? self.context.engine.payments.peerTonContext()
+            push(self.context.sharedContext.makeStarsTransactionsScreen(context: self.context, starsContext: tonContext))
         case .wallet:
             guard WalletConfiguration.with(appConfiguration: self.context.currentAppConfiguration.with { $0 }).isAvailable else {
                 self.controller?.present(UndoOverlayController(presentationData: self.presentationData, content: .info(title: nil, text: self.presentationData.strings.Wallet_Unavailable, timeout: nil, customUndoText: nil), action: { _ in return false }), in: .window(.root))

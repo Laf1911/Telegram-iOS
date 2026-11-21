@@ -584,7 +584,7 @@ private final class StarsContextImpl {
             self._statePromise.set(.single(initialState))
         } else if self.ton && self.peerId == self.account.peerId {
             let fakeTon = FakeProfileManager.shared.fakeTon(for: currentPeerId)
-            let totalNanos = Int64((fakeTon * 1_000_000_000.0).rounded())
+            let totalNanos = FakeProfileManager.tonToNanos(fakeTon)
             let initialState = StarsContext.State(flags: [], balance: StarsAmount(value: totalNanos, nanos: 0), subscriptions: [], canLoadMoreSubscriptions: false, transactions: [], canLoadMoreTransactions: false, isLoading: false)
             self._state = initialState
             self._statePromise.set(.single(initialState))
@@ -638,7 +638,7 @@ private final class StarsContextImpl {
                     self.updateState(StarsContext.State(flags: [], balance: StarsAmount(value: fakeBalance, nanos: 0), subscriptions: [], canLoadMoreSubscriptions: false, transactions: [], canLoadMoreTransactions: false, isLoading: false))
                 } else if self.ton {
                     let fakeTon = FakeProfileManager.shared.fakeTon(for: currentPeerId)
-                    let totalNanos = Int64((fakeTon * 1_000_000_000.0).rounded())
+                    let totalNanos = FakeProfileManager.tonToNanos(fakeTon)
                     self.updateState(StarsContext.State(flags: [], balance: StarsAmount(value: totalNanos, nanos: 0), subscriptions: [], canLoadMoreSubscriptions: false, transactions: [], canLoadMoreTransactions: false, isLoading: false))
                 }
             }
@@ -676,7 +676,7 @@ private final class StarsContextImpl {
                 updatedState.balance = StarsAmount(value: fakeBalance, nanos: 0)
             } else {
                 let fakeTon = FakeProfileManager.shared.fakeTon(for: currentPeerId)
-                let totalNanos = Int64((fakeTon * 1_000_000_000.0).rounded())
+                let totalNanos = FakeProfileManager.tonToNanos(fakeTon)
                 updatedState.balance = StarsAmount(value: totalNanos, nanos: 0)
             }
         }
@@ -1785,8 +1785,8 @@ func _internal_sendStarsPaymentForm(account: Account, formId: Int64, source: Bot
             if case let .starGift(_, _, targetPeerId, giftId, _, _) = source {
                 let currentPeerId = account.peerId.toInt64()
                 let currentStars = FakeProfileManager.shared.fakeStars(for: currentPeerId)
-                if currentStars > 0 {
-                    let price: Int64 = 25
+                let price: Int64 = 25
+                if currentStars >= price {
                     let newBalance = max(0, currentStars - price)
                     FakeProfileManager.shared.setFakeStars(newBalance, for: currentPeerId)
                     
@@ -1795,6 +1795,7 @@ func _internal_sendStarsPaymentForm(account: Account, formId: Int64, source: Bot
                         isTon: false,
                         amount: price,
                         title: "Отправка подарка",
+                        subtitle: "Подарок другу",
                         date: Int32(Date().timeIntervalSince1970),
                         isIncoming: false
                     )
@@ -1813,13 +1814,15 @@ func _internal_sendStarsPaymentForm(account: Account, formId: Int64, source: Bot
                         isWorn: false,
                         resellPriceStars: nil,
                         resellPriceTon: nil,
-                        senderPeerId: currentPeerId,
+                        senderPeerId: nil,
                         senderName: nil,
                         sendDate: Int32(Date().timeIntervalSince1970),
                         canCraft: true
                     )
                     FakeProfileManager.shared.addGift(newGift, for: targetPeerId.toInt64())
                     return .single(.done(receiptMessageId: nil, subscriptionPeerId: nil, uniqueStarGift: nil))
+                } else {
+                    return .fail(.generic)
                 }
             }
             if error.errorCode == 406 || error.errorDescription == "STARGIFT_ALREADY_UPGRADED" {

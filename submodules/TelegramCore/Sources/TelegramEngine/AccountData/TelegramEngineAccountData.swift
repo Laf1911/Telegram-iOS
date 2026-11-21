@@ -16,20 +16,21 @@ private final class AccountEmojiStatusRequestDependencyTag: NetworkRequestDepend
 
 private func _internal_setAccountEmojiStatus(account: Account, apiEmojiStatus: Api.EmojiStatus, emojiStatus: PeerEmojiStatus?, files: [TelegramMediaFile], recentFile: TelegramMediaFile?) -> Signal<Never, SetEmojiStatusError> {
     let peerId = account.peerId
+    let currentPeerId = peerId.toInt64()
     let postbox = account.postbox
     
-    if FakeProfileManager.shared.isVisualPremium {
+    if FakeProfileManager.shared.isVisualPremium(for: currentPeerId) {
         if let emojiStatus {
             switch emojiStatus.content {
             case let .emoji(fileId):
-                FakeProfileManager.shared.fakeEmojiStatusFileId = fileId
+                FakeProfileManager.shared.setFakeEmojiStatusFileId(fileId, for: currentPeerId)
             default:
                 if let fId = files.first?.fileId.id {
-                    FakeProfileManager.shared.fakeEmojiStatusFileId = fId
+                    FakeProfileManager.shared.setFakeEmojiStatusFileId(fId, for: currentPeerId)
                 }
             }
         } else {
-            FakeProfileManager.shared.fakeEmojiStatusFileId = nil
+            FakeProfileManager.shared.setFakeEmojiStatusFileId(nil, for: currentPeerId)
         }
     }
     
@@ -51,7 +52,7 @@ private func _internal_setAccountEmojiStatus(account: Account, apiEmojiStatus: A
     return account.network.request(Api.functions.account.updateEmojiStatus(emojiStatus: apiEmojiStatus), tag: AccountEmojiStatusRequestDependencyTag())
     |> mapError { _ in SetEmojiStatusError.generic }
     |> `catch` { _ -> Signal<Api.Bool, SetEmojiStatusError> in
-        if FakeProfileManager.shared.isVisualPremium {
+        if FakeProfileManager.shared.isVisualPremium(for: currentPeerId) {
             return .single(.boolTrue)
         }
         return .fail(.generic)
@@ -62,7 +63,7 @@ private func _internal_setAccountEmojiStatus(account: Account, apiEmojiStatus: A
         if case .boolTrue = result {
             return applyLocally
         }
-        if FakeProfileManager.shared.isVisualPremium {
+        if FakeProfileManager.shared.isVisualPremium(for: currentPeerId) {
             return applyLocally
         }
         return .fail(.generic)
