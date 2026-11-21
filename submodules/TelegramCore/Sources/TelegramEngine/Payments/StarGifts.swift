@@ -2113,7 +2113,7 @@ private func generateSingleFakeStarGift(item: FakeStarGiftItem, targetPeerId: En
             price: 100,
             convertStars: 85,
             availability: nil,
-            soldOut: false,
+            soldOut: nil,
             flags: [],
             upgradeStars: item.upgradeStars ?? 500,
             releasedBy: nil,

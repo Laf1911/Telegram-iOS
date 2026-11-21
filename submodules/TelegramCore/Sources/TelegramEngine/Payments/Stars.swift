@@ -1848,7 +1848,7 @@ func _internal_sendStarsPaymentForm(account: Account, formId: Int64, source: Bot
                         price: price,
                         convertStars: 85,
                         availability: nil,
-                        soldOut: false,
+                        soldOut: nil,
                         flags: [],
                         upgradeStars: 500,
                         releasedBy: nil,
